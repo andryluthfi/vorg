@@ -89,7 +89,7 @@ describe("enrichMetadata", () => {
 
     // Temporarily replace fetch
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = mockFetch as any;
+    globalThis.fetch = mockFetch as typeof globalThis.fetch;
 
     const result = await enrichMetadata(metadata);
 
@@ -113,7 +113,7 @@ describe("enrichMetadata", () => {
     };
 
     // Mock fetch to simulate API error
-    const mockFetch = async (url: RequestInfo | URL) => {
+    const mockFetch = async (_url: RequestInfo | URL) => {
       return {
         json: async () => ({
           Response: 'False',
@@ -124,6 +124,7 @@ describe("enrichMetadata", () => {
 
     // Temporarily replace fetch
     const originalFetch = globalThis.fetch;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     globalThis.fetch = mockFetch as any;
 
     const result = await enrichMetadata(metadata);
@@ -145,12 +146,13 @@ describe("enrichMetadata", () => {
     };
 
     // Mock fetch to throw network error
-    const mockFetch = async (url: RequestInfo | URL) => {
+    const mockFetch = async (_url: RequestInfo | URL) => {
       throw new Error('Network error');
     };
 
     // Temporarily replace fetch
     const originalFetch = globalThis.fetch;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     globalThis.fetch = mockFetch as any;
 
     const result = await enrichMetadata(metadata);
@@ -171,8 +173,8 @@ describe("enrichMetadata", () => {
     };
 
     // Mock fetch for series lookup and full data
-    const mockFetch = async (url: RequestInfo | URL) => {
-      const urlString = url.toString();
+    const mockFetch = async (_url: RequestInfo | URL) => {
+      const urlString = _url.toString();
       if (urlString.includes('t=Breaking+Bad')) {
         // Series lookup response
         return {
@@ -204,6 +206,7 @@ describe("enrichMetadata", () => {
 
     // Temporarily replace fetch
     const originalFetch = globalThis.fetch;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     globalThis.fetch = mockFetch as any;
 
     const result = await enrichMetadata(metadata);
@@ -227,7 +230,7 @@ describe("enrichMetadata", () => {
     };
 
     // Mock fetch to simulate movie not found
-    const mockFetch = async (url: RequestInfo | URL) => {
+    const mockFetch = async (_url: RequestInfo | URL) => {
       return {
         json: async () => ({
           Response: 'False',
@@ -238,6 +241,7 @@ describe("enrichMetadata", () => {
 
     // Temporarily replace fetch
     const originalFetch = globalThis.fetch;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     globalThis.fetch = mockFetch as any;
 
     const result = await enrichMetadata(metadata);

@@ -1,7 +1,7 @@
 import * as fs from 'fs-extra';
 import * as path from 'path';
 import { MediaFile } from '../core-data/scanner';
-import { MediaMetadata, EnrichedMetadata, generateNewName, parseFilename, sanitizeFilename } from '../core-data/parser';
+import { EnrichedMetadata, generateNewName, parseFilename, sanitizeFilename } from '../core-data/parser';
 import { saveFileMove } from '../infrastructure/database';
 
 export interface ProcessedFile {
@@ -22,20 +22,20 @@ export async function organizeFiles(
   const results: ProcessedFile[] = [];
 
   // Separate video and subtitle files
-  const videoFiles: { file: MediaFile; metadata: EnrichedMetadata; index: number }[] = [];
-  const subtitleFiles: { file: MediaFile; index: number }[] = [];
+  const videoFiles: { file: MediaFile; metadata: EnrichedMetadata }[] = [];
+  const subtitleFiles: { file: MediaFile }[] = [];
 
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
     if (file.type === 'video') {
-      videoFiles.push({ file, metadata: metadatas[i], index: i });
+      videoFiles.push({ file, metadata: metadatas[i] });
     } else if (file.type === 'subtitle') {
-      subtitleFiles.push({ file, index: i });
+      subtitleFiles.push({ file });
     }
   }
 
   // Process video files first
-  for (const { file, metadata, index } of videoFiles) {
+  for (const { file, metadata } of videoFiles) {
     let destDir: string;
     let baseName: string;
 
@@ -89,7 +89,7 @@ export async function organizeFiles(
   }
 
   // Process subtitle files
-  for (const { file, index } of subtitleFiles) {
+  for (const { file } of subtitleFiles) {
     // Try to find matching video file
     const subtitleMetadata = parseFilename(file.name);
     let matchedVideo: { file: MediaFile; metadata: EnrichedMetadata } | null = null;
@@ -183,6 +183,6 @@ function isSimilarName(subtitleName: string, videoName: string): boolean {
   // Check if subtitle name contains video name or vice versa
   return cleanSubtitle.includes(cleanVideo) || cleanVideo.includes(cleanSubtitle) ||
          // Check for common variations
-         cleanSubtitle.replace(/[\.\-\s]/g, '').includes(cleanVideo.replace(/[\.\-\s]/g, '')) ||
-         cleanVideo.replace(/[\.\-\s]/g, '').includes(cleanSubtitle.replace(/[\.\-\s]/g, ''));
+         cleanSubtitle.replace(/[\s.-]/g, '').includes(cleanVideo.replace(/[\s.-]/g, '')) ||
+         cleanVideo.replace(/[\s.-]/g, '').includes(cleanSubtitle.replace(/[\s.-]/g, ''));
 }

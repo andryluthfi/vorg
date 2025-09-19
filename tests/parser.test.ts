@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { parseFilename, sanitizeFilename, generateNewName, MediaMetadata, EnrichedMetadata } from '../src/core-data/parser';
+import { parseFilename, sanitizeFilename, generateNewName, EnrichedMetadata } from '../src/core-data/parser';
 
 describe("parseFilename", () => {
   test("should parse movie filename without year", () => {

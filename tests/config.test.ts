@@ -2,7 +2,7 @@ import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import * as fs from 'fs-extra';
 import * as path from 'path';
 import * as os from 'os';
-import { loadConfig, saveConfig, AppConfig, ConfigResult } from '../src/config/config';
+import { loadConfig, saveConfig, AppConfig } from '../src/config/config';
 
 // Create a temporary directory for testing
 let tempDir: string;

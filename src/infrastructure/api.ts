@@ -1,14 +1,107 @@
-import * as cheerio from 'cheerio';
 import * as fs from 'fs-extra';
 import * as path from 'path';
 import { MediaMetadata, EnrichedMetadata } from '../core-data/parser';
 import { loadConfig } from '../config/config';
-import { getTVEpisode, getTVShowEpisodes, saveTVEpisodeBatch, saveTVShow, saveMovie, getTVShowByImdbID, getMovieByImdbID } from './database';
+import { getTVEpisode, saveTVEpisodeBatch, saveTVShow, saveMovie, getTVShowByImdbID, getMovieByImdbID } from './database';
 
 const OMDB_BASE_URL = 'http://www.omdbapi.com/';
 
+interface OmdbRating {
+  Source: string;
+  Value: string;
+}
+
+interface OmdbResponse {
+  Title?: string;
+  Year?: string;
+  Rated?: string;
+  Released?: string;
+  Runtime?: string;
+  Genre?: string;
+  Director?: string;
+  Writer?: string;
+  Actors?: string;
+  Plot?: string;
+  Language?: string;
+  Country?: string;
+  Awards?: string;
+  Poster?: string;
+  Ratings?: OmdbRating[];
+  Metascore?: string;
+  imdbRating?: string;
+  imdbVotes?: string;
+  imdbID?: string;
+  Type?: string;
+  DVD?: string;
+  BoxOffice?: string;
+  Production?: string;
+  Website?: string;
+  Response: string;
+  Error?: string;
+  totalSeasons?: string;
+}
+
+interface EpisodeData {
+  imdbID: string;
+  seriesID: string;
+  title: string;
+  year: string;
+  rated: string;
+  released: string;
+  season: number;
+  episode: number;
+  runtime: string;
+  genre: string;
+  director: string;
+  writer: string;
+  actors: string;
+  plot: string;
+  language: string;
+  country: string;
+  awards: string;
+  poster: string;
+  ratings: string;
+  metascore: string;
+  imdbRating: string;
+  imdbVotes: string;
+  type: string;
+  response: string;
+}
+
+interface SeasonResponse {
+  Title: string;
+  Season: string;
+  totalSeasons: string;
+  Episodes: Array<{
+    Title: string;
+    Released: string;
+    Episode: string;
+    imdbRating: string;
+    imdbID: string;
+    Year?: string;
+    Rated?: string;
+    Runtime?: string;
+    Genre?: string;
+    Director?: string;
+    Writer?: string;
+    Actors?: string;
+    Plot?: string;
+    Language?: string;
+    Country?: string;
+    Awards?: string;
+    Poster?: string;
+    Ratings?: OmdbRating[];
+    Metascore?: string;
+    imdbVotes?: string;
+    Type?: string;
+    Response?: string;
+  }>;
+  Response: string;
+  Error?: string;
+}
+
 // Session-based cache for search results and user selections
-const searchCache = new Map<string, any>();
+const searchCache = new Map<string, Record<string, unknown>>();
 const selectionCache = new Map<string, string>();
 
 async function getOmdbApiKey(): Promise<string> {
@@ -27,8 +120,8 @@ export async function validateApiKey(apiKey: string): Promise<boolean> {
     url.searchParams.set('t', 'The Matrix'); // Test with a known movie
     url.searchParams.set('r', 'json');
     const response = await fetch(url);
-    const data = await response.json() as any;
-    return data.Response === 'True';
+    const data = await response.json() as Record<string, unknown>;
+    return (data.Response as string) === 'True';
   } catch (error) {
     return false;
   }
@@ -57,8 +150,8 @@ async function searchAndResolveImdbID(title: string, year?: number): Promise<str
 
   // Check cache first
   if (searchCache.has(cacheKey)) {
-    const cachedResult = searchCache.get(cacheKey)!;
-    return cachedResult.imdbID;
+    const cachedResult = searchCache.get(cacheKey)! as Record<string, unknown>;
+    return cachedResult.imdbID as string;
   }
 
   // Not in cache, fetch from OMDB using title lookup
@@ -71,12 +164,12 @@ async function searchAndResolveImdbID(title: string, year?: number): Promise<str
 
   await logToFile(`OMDB Title Lookup URL: ${searchUrl.toString()}`);
   const response = await fetch(searchUrl);
-  const searchData = await response.json() as any;
+  const searchData = await response.json() as Record<string, unknown>;
   await logToFile(`OMDB Title Lookup Response: ${JSON.stringify(searchData)}`);
 
-  if (searchData.Response === 'True') {
+  if ((searchData.Response as string) === 'True') {
     searchCache.set(cacheKey, searchData);
-    return searchData.imdbID;
+    return searchData.imdbID as string;
   } else {
     await logToFile(`OMDB Title lookup failed: ${searchData.Error}`);
     return null;
@@ -101,56 +194,56 @@ export async function enrichMetadata(metadata: MediaMetadata): Promise<EnrichedM
 
     // Check if data already exists in database
     if (metadata.type === 'movie') {
-      const existingMovie: any = getMovieByImdbID(imdbID);
+      const existingMovie = getMovieByImdbID(imdbID) as Record<string, unknown> | undefined;
       if (existingMovie) {
         await logToFile(`Found existing movie data in database for IMDb ID: ${imdbID}`);
         // Use database data for enrichment and correct title casing
-        enriched.title = existingMovie.title; // Update with correct casing
-        enriched.plot = existingMovie.plot;
-        enriched.genre = existingMovie.genre;
-        enriched.director = existingMovie.director;
-        enriched.actors = existingMovie.actors;
-        enriched.imdbRating = existingMovie.imdbRating;
+        enriched.title = existingMovie.title as string; // Update with correct casing
+        enriched.plot = existingMovie.plot as string;
+        enriched.genre = existingMovie.genre as string;
+        enriched.director = existingMovie.director as string;
+        enriched.actors = existingMovie.actors as string;
+        enriched.imdbRating = existingMovie.imdbRating as string;
         return enriched;
       }
     } else {
       // For TV shows, check series data and episode data
-      const existingSeries: any = getTVShowByImdbID(imdbID);
+      const existingSeries = getTVShowByImdbID(imdbID) as Record<string, unknown> | undefined;
       if (existingSeries) {
         await logToFile(`Found existing series data in database for IMDb ID: ${imdbID}`);
-        enriched.title = existingSeries.title; // Update with correct casing
+        enriched.title = existingSeries.title as string; // Update with correct casing
 
         // For episodes, check if episode data exists
         if (metadata.season && metadata.episode) {
-          const existingEpisode: any = getTVEpisode(imdbID, metadata.season, metadata.episode);
+          const existingEpisode = getTVEpisode(imdbID, metadata.season, metadata.episode) as Record<string, unknown> | undefined;
           if (existingEpisode) {
             await logToFile(`Found existing episode data in database`);
-            enriched.plot = existingEpisode.plot;
-            enriched.genre = existingEpisode.genre;
-            enriched.actors = existingEpisode.actors;
-            enriched.imdbRating = existingEpisode.imdbRating;
-            enriched.episodeTitle = existingEpisode.title; // Episode title
+            enriched.plot = existingEpisode.plot as string;
+            enriched.genre = existingEpisode.genre as string;
+            enriched.actors = existingEpisode.actors as string;
+            enriched.imdbRating = existingEpisode.imdbRating as string;
+            enriched.episodeTitle = existingEpisode.title as string; // Episode title
             return enriched;
           } else {
             // Series exists but episode doesn't, fetch episode data
             await logToFile(`Series exists but episode data missing, fetching season ${metadata.season}`);
             await fetchAndStoreTVSeason(imdbID, metadata.season, await getOmdbApiKey());
-            const episodeData: any = getTVEpisode(imdbID, metadata.season, metadata.episode);
+            const episodeData = getTVEpisode(imdbID, metadata.season, metadata.episode) as Record<string, unknown> | undefined;
             if (episodeData) {
-              enriched.plot = episodeData.plot;
-              enriched.genre = episodeData.genre;
-              enriched.actors = episodeData.actors;
-              enriched.imdbRating = episodeData.imdbRating;
-              enriched.episodeTitle = episodeData.title;
+              enriched.plot = episodeData.plot as string;
+              enriched.genre = episodeData.genre as string;
+              enriched.actors = episodeData.actors as string;
+              enriched.imdbRating = episodeData.imdbRating as string;
+              enriched.episodeTitle = episodeData.title as string;
             }
             return enriched;
           }
         } else {
           // Just series info, no specific episode
-          enriched.plot = existingSeries.plot;
-          enriched.genre = existingSeries.genre;
-          enriched.actors = existingSeries.actors;
-          enriched.imdbRating = existingSeries.imdbRating;
+          enriched.plot = existingSeries.plot as string;
+          enriched.genre = existingSeries.genre as string;
+          enriched.actors = existingSeries.actors as string;
+          enriched.imdbRating = existingSeries.imdbRating as string;
           return enriched;
         }
       }
@@ -166,14 +259,14 @@ export async function enrichMetadata(metadata: MediaMetadata): Promise<EnrichedM
 
     await logToFile(`OMDB Fetch URL: ${url.toString()}`);
     const response = await fetch(url);
-    const data = await response.json() as any;
+    const data = await response.json() as OmdbResponse;
     await logToFile(`OMDB Fetch Response: ${JSON.stringify(data)}`);
 
-    if (data.Response === 'True') {
+    if ((data.Response as string) === 'True') {
       if (data.Type === 'movie') {
         await logToFile(`Original movie title: "${data.Title}", Year: "${data.Year}"`);
         // Clean title: remove year based on data.Year and trim
-        if (data.Year) {
+        if (data.Year && data.Title) {
           const yearPattern = new RegExp(`\\s*\\(${data.Year}\\)\\s*$`);
           await logToFile(`Attempting to match pattern: "${yearPattern.source}" against title: "${data.Title}"`);
           const originalTitle = data.Title;
@@ -196,15 +289,15 @@ export async function enrichMetadata(metadata: MediaMetadata): Promise<EnrichedM
           await logToFile(`No Year field found, skipping title cleaning`);
         }
         // Store full movie data in database
-        saveMovie(data);
+        saveMovie(data as unknown as Record<string, unknown>);
         await logToFile(`Movie data stored in database: ${data.imdbID} with title: "${data.Title}"`);
 
         // Verify what was actually stored in database
-        const savedMovie: any = getMovieByImdbID(data.imdbID);
-        await logToFile(`Database verification - stored title: "${savedMovie?.title}"`);
+        const savedMovie = getMovieByImdbID(data.imdbID as string) as Record<string, unknown> | undefined;
+        await logToFile(`Database verification - stored title: "${savedMovie?.title as string}"`);
 
         // Enrich metadata with correct title casing
-        enriched.title = data.Title; // Update with correct casing
+        enriched.title = data.Title || enriched.title; // Update with correct casing
         enriched.plot = data.Plot;
         enriched.genre = data.Genre;
         enriched.director = data.Director;
@@ -212,16 +305,16 @@ export async function enrichMetadata(metadata: MediaMetadata): Promise<EnrichedM
         enriched.imdbRating = data.imdbRating;
       } else if (data.Type === 'series') {
         // Store full series data in database
-        saveTVShow(data);
+        saveTVShow(data as unknown as Record<string, unknown>);
         await logToFile(`TV Show data stored in database: ${data.imdbID}`);
 
         // Update title with correct casing
-        enriched.title = data.Title;
+        enriched.title = data.Title || enriched.title;
 
         // For series, we need episode data too
         if (metadata.season && metadata.episode) {
           await fetchAndStoreTVSeason(imdbID, metadata.season, OMDB_API_KEY);
-          const episodeData: any = getTVEpisode(imdbID, metadata.season, metadata.episode);
+          const episodeData: EpisodeData | undefined = getTVEpisode(imdbID, metadata.season, metadata.episode) as EpisodeData | undefined;
           if (episodeData) {
             enriched.plot = episodeData.plot;
             enriched.genre = episodeData.genre;
@@ -254,7 +347,7 @@ async function fetchAndStoreTVSeason(seriesImdbID: string, season: number, apiKe
     await logToFile(`Fetching whole season ${season} for series IMDb ID: ${seriesImdbID}`);
 
     // Get series data first to get genre/actors
-    const seriesData: any = getTVShowByImdbID(seriesImdbID);
+    const seriesData = getTVShowByImdbID(seriesImdbID) as Record<string, unknown> | undefined;
     if (!seriesData) {
       await logToFile(`Series data not found in database for IMDb ID: ${seriesImdbID}`);
       return;
@@ -268,10 +361,10 @@ async function fetchAndStoreTVSeason(seriesImdbID: string, season: number, apiKe
     seasonUrl.searchParams.set('r', 'json');
 
     const seasonResponse = await fetch(seasonUrl);
-    const seasonData = await seasonResponse.json() as any;
+    const seasonData = await seasonResponse.json() as SeasonResponse;
 
     if (seasonData.Response === 'True' && seasonData.Episodes) {
-      const episodes = seasonData.Episodes.map((ep: any) => ({
+      const episodes = seasonData.Episodes.map((ep) => ({
         imdbID: ep.imdbID,
         seriesID: seriesImdbID,
         Title: ep.Title,
@@ -306,61 +399,4 @@ async function fetchAndStoreTVSeason(seriesImdbID: string, season: number, apiKe
   } catch (error) {
     await logToFile(`Error fetching season: ${error instanceof Error ? error.message : String(error)}`);
   }
-}
-
-async function scrapeMetadata(metadata: MediaMetadata): Promise<EnrichedMetadata> {
-  await logToFile(`Starting web scraping for: ${JSON.stringify(metadata)}`);
-
-  const enriched: EnrichedMetadata = { ...metadata };
-
-  try {
-    // First, try to get the correct title using Wikipedia's opensearch API
-    const searchApiUrl = `https://en.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(metadata.title)}&limit=1&format=json`;
-    await logToFile(`Wikipedia search URL: ${searchApiUrl}`);
-    const searchResponse = await fetch(searchApiUrl);
-    const searchData = await searchResponse.json() as any;
-    await logToFile(`Wikipedia search response: ${JSON.stringify(searchData)}`);
-
-    if (searchData && searchData[1] && searchData[1].length > 0) {
-      const suggestedTitle = searchData[1][0];
-      await logToFile(`Suggested title: "${suggestedTitle}"`);
-      // Preserve original title casing, do not update
-      await logToFile(`Title not updated, keeping: "${metadata.title}"`);
-    } else {
-      await logToFile(`No suggestions found from Wikipedia search`);
-    }
-
-    // If we have a corrected title, use it for the wiki page
-    const wikiTitle = enriched.title || metadata.title;
-    const searchUrl = `https://en.wikipedia.org/wiki/${encodeURIComponent(wikiTitle)}`;
-    await logToFile(`Wikipedia page URL: ${searchUrl}`);
-    const response = await fetch(searchUrl);
-    const html = await response.text();
-    const $ = cheerio.load(html);
-
-    // Extract plot from infobox or first paragraph
-    const plot = $('p').first().text().trim();
-    if (plot) {
-      enriched.plot = plot;
-      await logToFile(`Plot extracted: ${plot.substring(0, 100)}...`);
-    }
-
-    // Try to get year from infobox
-    const yearText = $('.infobox th:contains("Release date")').next().text();
-    if (yearText && !metadata.year) {
-      const yearMatch = yearText.match(/\b(19|20)\d{2}\b/);
-      if (yearMatch) {
-        enriched.year = parseInt(yearMatch[0]);
-        await logToFile(`Year extracted: ${enriched.year}`);
-      }
-    }
-
-    await logToFile(`Scraping completed successfully: ${JSON.stringify(enriched)}`);
-
-  } catch (error) {
-    await logToFile(`Web scraping failed: ${error instanceof Error ? error.message : String(error)}`);
-    console.warn('Web scraping failed:', error instanceof Error ? error.message : String(error));
-  }
-
-  return enriched;
 }

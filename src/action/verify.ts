@@ -3,9 +3,8 @@ import * as path from 'path';
 import * as fs from 'fs-extra';
 import { loadConfig } from '../config/config';
 import { scanMediaFiles, MediaFile } from '../core-data/scanner';
-import { parseFilename, MediaMetadata, EnrichedMetadata } from '../core-data/parser';
+import { parseFilename, EnrichedMetadata } from '../core-data/parser';
 import { enrichMetadata } from '../infrastructure/api';
-import { organizeFiles, ProcessedFile } from '../business-logic/organizer';
 import { closeDatabase } from '../infrastructure/database';
 
 interface VerificationResult {
@@ -19,7 +18,7 @@ interface VerificationResult {
   emptyFolders: string[];
 }
 
-export async function handleVerify(scanPath: string, argv: any) {
+export async function handleVerify(scanPath: string, argv: Record<string, unknown>) {
   console.log('🔍 Media Target Verification\n');
 
   // Load config
@@ -27,8 +26,8 @@ export async function handleVerify(scanPath: string, argv: any) {
   const config = configResult.config;
 
   // Get destination paths
-  let moviePath = argv['movie-path'] || config.moviePath;
-  let tvPath = argv['tv-path'] || config.tvPath;
+  const moviePath = (argv['movie-path'] as string | undefined) || config.moviePath;
+  const tvPath = (argv['tv-path'] as string | undefined) || config.tvPath;
 
   if (!moviePath || !tvPath) {
     console.error('❌ Movie path and TV path must be configured. Please run without --verify-target first to set them up.');
@@ -74,7 +73,7 @@ export async function handleVerify(scanPath: string, argv: any) {
   }
 
   // Execute the plan
-  await executeVerificationPlan(verificationResults, moviePath, tvPath);
+  await executeVerificationPlan(verificationResults);
 
   console.log('\n🎉 Verification and cleanup complete!');
   closeDatabase();
@@ -193,7 +192,7 @@ function displayVerificationResults(results: VerificationResult) {
   }
 }
 
-async function executeVerificationPlan(results: VerificationResult, moviePath: string, tvPath: string) {
+async function executeVerificationPlan(results: VerificationResult) {
   console.log('🔄 Executing verification plan...\n');
 
   // Move misplaced files

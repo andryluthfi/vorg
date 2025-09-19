@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 
 import inquirer from 'inquirer';
-import * as path from 'path';
 import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
 import { handleRevert } from './action/revert';
@@ -10,7 +9,7 @@ import { handleVerify } from './action/verify';
 import { handleDbShow } from './action/db';
 import { closeDatabase } from './infrastructure/database';
 
-interface Args {
+interface Args extends Record<string, unknown> {
   _: string[];
   scanPath?: string;
   'scan-path'?: string;

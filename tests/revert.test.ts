@@ -21,6 +21,7 @@ afterEach(() => {
 });
 
 // Helper function to create test directory structure
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function createTestStructure(baseDir: string, structure: { [key: string]: any }) {
   for (const [name, content] of Object.entries(structure)) {
     const fullPath = path.join(baseDir, name);

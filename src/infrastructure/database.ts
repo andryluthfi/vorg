@@ -1,7 +1,6 @@
 import { Database } from 'bun:sqlite';
 import * as path from 'path';
 import * as fs from 'fs';
-import { EnrichedMetadata } from '../core-data/parser';
 
 // Use executable directory for database path instead of __dirname
 const exeDir = path.dirname(process.execPath);
@@ -159,100 +158,93 @@ const insertMovie = db.prepare(`
   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `);
 
-const insertFileMove = db.prepare(`
-  INSERT INTO file_moves (original_path, new_path)
-  VALUES (?, ?)
-`);
 
 // Save full OMDB TV show data
-export function saveTVShow(showData: any, testDb?: Database): void {
-  const targetDb = testDb || db;
+export function saveTVShow(showData: Record<string, unknown>): void {
   insertTVShow.run(
-    showData.imdbID,
-    showData.Title,
-    showData.Year,
-    showData.Rated,
-    showData.Released,
-    showData.Runtime,
-    showData.Genre,
-    showData.Director,
-    showData.Writer,
-    showData.Actors,
-    showData.Plot,
-    showData.Language,
-    showData.Country,
-    showData.Awards,
-    showData.Poster,
+    String(showData.imdbID || ''),
+    String(showData.Title || ''),
+    String(showData.Year || ''),
+    String(showData.Rated || ''),
+    String(showData.Released || ''),
+    String(showData.Runtime || ''),
+    String(showData.Genre || ''),
+    String(showData.Director || ''),
+    String(showData.Writer || ''),
+    String(showData.Actors || ''),
+    String(showData.Plot || ''),
+    String(showData.Language || ''),
+    String(showData.Country || ''),
+    String(showData.Awards || ''),
+    String(showData.Poster || ''),
     JSON.stringify(showData.Ratings || []),
-    showData.Metascore,
-    showData.imdbRating,
-    showData.imdbVotes,
-    showData.Type,
-    showData.totalSeasons,
-    showData.Response
+    String(showData.Metascore || ''),
+    String(showData.imdbRating || ''),
+    String(showData.imdbVotes || ''),
+    String(showData.Type || ''),
+    String(showData.totalSeasons || ''),
+    String(showData.Response || '')
   );
 }
 
 // Save full OMDB movie data
-export function saveMovie(movieData: any, testDb?: Database): void {
-  const targetDb = testDb || db;
+export function saveMovie(movieData: Record<string, unknown>): void {
   insertMovie.run(
-    movieData.imdbID,
-    movieData.Title,
-    movieData.Year,
-    movieData.Rated,
-    movieData.Released,
-    movieData.Runtime,
-    movieData.Genre,
-    movieData.Director,
-    movieData.Writer,
-    movieData.Actors,
-    movieData.Plot,
-    movieData.Language,
-    movieData.Country,
-    movieData.Awards,
-    movieData.Poster,
+    String(movieData.imdbID || ''),
+    String(movieData.Title || ''),
+    String(movieData.Year || ''),
+    String(movieData.Rated || ''),
+    String(movieData.Released || ''),
+    String(movieData.Runtime || ''),
+    String(movieData.Genre || ''),
+    String(movieData.Director || ''),
+    String(movieData.Writer || ''),
+    String(movieData.Actors || ''),
+    String(movieData.Plot || ''),
+    String(movieData.Language || ''),
+    String(movieData.Country || ''),
+    String(movieData.Awards || ''),
+    String(movieData.Poster || ''),
     JSON.stringify(movieData.Ratings || []),
-    movieData.Metascore,
-    movieData.imdbRating,
-    movieData.imdbVotes,
-    movieData.Type,
-    movieData.DVD,
-    movieData.BoxOffice,
-    movieData.Production,
-    movieData.Website,
-    movieData.Response
+    String(movieData.Metascore || ''),
+    String(movieData.imdbRating || ''),
+    String(movieData.imdbVotes || ''),
+    String(movieData.Type || ''),
+    String(movieData.DVD || ''),
+    String(movieData.BoxOffice || ''),
+    String(movieData.Production || ''),
+    String(movieData.Website || ''),
+    String(movieData.Response || '')
   );
 }
 
 // Save full OMDB episode data
-export function saveTVShowEpisode(episodeData: any, testDb?: Database): void {
-  const targetDb = testDb || db;
+export function saveTVShowEpisode(episodeData: Record<string, unknown>): void {
   insertTVShowEpisode.run(
-    episodeData.imdbID,
-    episodeData.seriesID,
-    episodeData.Title,
-    episodeData.Year,
-    episodeData.Rated,
-    episodeData.Released,
-    episodeData.Season,
-    episodeData.Episode,
-    episodeData.Runtime,
-    episodeData.Genre,
-    episodeData.Director,
-    episodeData.Writer,
-    episodeData.Actors,
-    episodeData.Plot,
-    episodeData.Language,
-    episodeData.Country,
-    episodeData.Awards,
-    episodeData.Poster,
+    String(episodeData.imdbID || ''),
+    String(episodeData.seriesID || ''),
+    String(episodeData.Title || ''),
+    String(episodeData.Year || ''),
+    String(episodeData.Rated || ''),
+    String(episodeData.Released || ''),
+    Number(episodeData.Season || 0),
+    Number(episodeData.Episode || 0),
+    String(episodeData.Runtime || ''),
+    String(episodeData.Genre || ''),
+    String(episodeData.Director || ''),
+    String(episodeData.Writer || ''),
+    String(episodeData.Actors || ''),
+    String(episodeData.Plot || ''),
+    String(episodeData.Language || ''),
+    String(episodeData.Country || ''),
+    String(episodeData.Awards || ''),
+    String(episodeData.Poster || ''),
     JSON.stringify(episodeData.Ratings || []),
-    episodeData.Metascore,
-    episodeData.imdbRating,
-    episodeData.imdbVotes,
-    episodeData.Type,
-    episodeData.Response
+    String(episodeData.Metascore || ''),
+    String(episodeData.imdbRating || ''),
+    String(episodeData.imdbVotes || ''),
+    String(episodeData.Type || ''),
+    String(episodeData.Response || '')
   );
 }
 
@@ -281,86 +273,83 @@ export function getTVEpisode(seriesImdbID: string, season: number, episode: numb
   return stmt.get(seriesImdbID, season, episode);
 }
 
-export function getTVShowEpisodes(seriesImdbID: string) {
+export function getTVShowEpisodes(seriesImdbID: string): Record<string, unknown>[] {
   const stmt = db.prepare('SELECT * FROM tv_show_episode WHERE seriesID = ? ORDER BY season, episode');
-  return stmt.all(seriesImdbID) as any[];
+  return stmt.all(seriesImdbID) as Record<string, unknown>[];
 }
 
-export function getTVShowSeasons(seriesImdbID: string) {
+export function getTVShowSeasons(seriesImdbID: string): Record<string, unknown>[] {
   const stmt = db.prepare('SELECT DISTINCT season FROM tv_show_episode WHERE seriesID = ? ORDER BY season');
-  return stmt.all(seriesImdbID) as any[];
+  return stmt.all(seriesImdbID) as Record<string, unknown>[];
 }
 
-export function saveTVEpisodeBatch(episodes: any[], testDb?: Database): void {
-  const targetDb = testDb || db;
-  const insertStmt = targetDb.prepare(`
+export function saveTVEpisodeBatch(episodes: Record<string, unknown>[]): void {
+  const insertStmt = db.prepare(`
     INSERT OR REPLACE INTO tv_show_episode (imdbID, seriesID, title, year, rated, released, season, episode, runtime, genre, director, writer, actors, plot, language, country, awards, poster, ratings, metascore, imdbRating, imdbVotes, type, response)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   for (const episode of episodes) {
     insertStmt.run(
-      episode.imdbID,
-      episode.seriesID,
-      episode.Title,
-      episode.Year,
-      episode.Rated,
-      episode.Released,
-      episode.Season,
-      episode.Episode,
-      episode.Runtime,
-      episode.Genre,
-      episode.Director,
-      episode.Writer,
-      episode.Actors,
-      episode.Plot,
-      episode.Language,
-      episode.Country,
-      episode.Awards,
-      episode.Poster,
+      String(episode.imdbID || ''),
+      String(episode.seriesID || ''),
+      String(episode.Title || ''),
+      String(episode.Year || ''),
+      String(episode.Rated || ''),
+      String(episode.Released || ''),
+      Number(episode.Season || 0),
+      Number(episode.Episode || 0),
+      String(episode.Runtime || ''),
+      String(episode.Genre || ''),
+      String(episode.Director || ''),
+      String(episode.Writer || ''),
+      String(episode.Actors || ''),
+      String(episode.Plot || ''),
+      String(episode.Language || ''),
+      String(episode.Country || ''),
+      String(episode.Awards || ''),
+      String(episode.Poster || ''),
       JSON.stringify(episode.Ratings || []),
-      episode.Metascore,
-      episode.imdbRating,
-      episode.imdbVotes,
-      episode.Type,
-      episode.Response
+      String(episode.Metascore || ''),
+      String(episode.imdbRating || ''),
+      String(episode.imdbVotes || ''),
+      String(episode.Type || ''),
+      String(episode.Response || '')
     );
   }
 }
 
-export function saveFileMove(originalPath: string, newPath: string, testDb?: Database): void {
-  const targetDb = testDb || db;
-  targetDb.prepare(`
+export function saveFileMove(originalPath: string, newPath: string): void {
+  db.prepare(`
     INSERT INTO file_moves (original_path, new_path)
     VALUES (?, ?)
   `).run(originalPath, newPath);
 }
 
-export function getRecentMoves(testDb?: Database): any[] {
-  const targetDb = testDb || db;
-  const stmt = targetDb.prepare('SELECT * FROM file_moves ORDER BY timestamp DESC LIMIT 100');
-  return stmt.all() as any[];
+export function getRecentMoves(): Record<string, unknown>[] {
+  const stmt = db.prepare('SELECT * FROM file_moves ORDER BY timestamp DESC LIMIT 100');
+  return stmt.all() as Record<string, unknown>[];
 }
 
-export function revertLastMoves(count: number = 10): any[] {
+export function revertLastMoves(count: number = 10): Record<string, unknown>[] {
   const stmt = db.prepare('SELECT * FROM file_moves ORDER BY timestamp DESC LIMIT ?');
-  const moves = stmt.all(count) as any[];
+  const moves = stmt.all(count) as Record<string, unknown>[];
   return moves;
 }
 
-export function getAllMovies(): any[] {
+export function getAllMovies(): Record<string, unknown>[] {
   const stmt = db.prepare('SELECT * FROM movies ORDER BY title');
-  return stmt.all() as any[];
+  return stmt.all() as Record<string, unknown>[];
 }
 
-export function getAllTVShows(): any[] {
+export function getAllTVShows(): Record<string, unknown>[] {
   const stmt = db.prepare('SELECT * FROM tv_show ORDER BY title');
-  return stmt.all() as any[];
+  return stmt.all() as Record<string, unknown>[];
 }
 
-export function getAllTVEpisodes(): any[] {
+export function getAllTVEpisodes(): Record<string, unknown>[] {
   const stmt = db.prepare('SELECT * FROM tv_show_episode ORDER BY seriesID, season, episode');
-  return stmt.all() as any[];
+  return stmt.all() as Record<string, unknown>[];
 }
 
 export function closeDatabase(): void {

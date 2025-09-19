@@ -1,4 +1,5 @@
-const parseTorrentName = require('parse-torrent-name') as any;
+// @ts-expect-error - parse-torrent-name library lacks TypeScript definitions
+import parseTorrentName from 'parse-torrent-name';
 
 export interface MediaMetadata {
   title: string;
@@ -74,7 +75,8 @@ export function sanitizeFilename(filename: string): string {
   }
 
   // Remove control characters
-  sanitized = sanitized.replace(/[\x00-\x1F\x7F-\x9F]/g, '');
+  // eslint-disable-next-line no-control-regex
+  sanitized = sanitized.replace(/[\0-\x1F\x7F-\x9F]/g, '');
 
   // Remove trailing dots and spaces (Windows issue)
   sanitized = sanitized.replace(/[.\s]+$/, '');

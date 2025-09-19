@@ -2,7 +2,7 @@ import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import * as fs from 'fs-extra';
 import * as path from 'path';
 import * as os from 'os';
-import { scanMediaFiles, MediaFile } from '../src/core-data/scanner';
+import { scanMediaFiles } from '../src/core-data/scanner';
 import { AppConfig } from '../src/config/config';
 
 // Create a temporary directory for testing

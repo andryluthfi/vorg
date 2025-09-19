@@ -1,12 +1,60 @@
 import inquirer from 'inquirer';
 import * as path from 'path';
 import * as fs from 'fs-extra';
+import * as os from 'os';
 import { loadConfig, saveConfig, AppConfig } from '../config/config';
-import { scanMediaFiles, MediaFile } from '../core-data/scanner';
-import { parseFilename, MediaMetadata, EnrichedMetadata } from '../core-data/parser';
+import { scanMediaFiles } from '../core-data/scanner';
+import { parseFilename, EnrichedMetadata } from '../core-data/parser';
 import { enrichMetadata, validateApiKey } from '../infrastructure/api';
 import { organizeFiles, ProcessedFile } from '../business-logic/organizer';
 import { closeDatabase } from '../infrastructure/database';
+
+interface FileInfo {
+  oldName: string;
+  newName: string;
+}
+
+interface FileNode {
+  [key: string]: FileNode | FileInfo[];
+}
+
+function displayNode(node: FileNode, indent: string = '  ') {
+  for (const [key, value] of Object.entries(node)) {
+    if (key === '_files') {
+      const files = value as FileInfo[];
+      if (files.length === 1) {
+        console.log(`${indent}📄 ${files[0].oldName} ⮞ \x1b[32m${files[0].newName}\x1b[0m`);
+      } else if (files.length > 1) {
+        console.log(`${indent}📄 Multiple files:`);
+
+        // Calculate max lengths for proper alignment
+        const maxOldLength = Math.max(...files.map(f => f.oldName.length));
+        const maxNewLength = Math.max(...files.map(f => f.newName.length));
+
+        // Create table borders
+        const header = `${indent}  ┌─${'─'.repeat(maxOldLength)}─┬─${'─'.repeat(maxNewLength)}─┐`;
+        const separator = `${indent}  ├─${'─'.repeat(maxOldLength)}─┼─${'─'.repeat(maxNewLength)}─┤`;
+        const footer = `${indent}  └─${'─'.repeat(maxOldLength)}─┴─${'─'.repeat(maxNewLength)}─┘`;
+
+        console.log(header);
+        console.log(`${indent}  │ ${'Old Name'.padEnd(maxOldLength)} │ ${'New Name'.padEnd(maxNewLength)} │`);
+        console.log(separator);
+
+        // Display each file with right-padded old names
+        for (const file of files) {
+          const paddedOldName = file.oldName.padEnd(maxOldLength);
+          const paddedNewName = file.newName.padEnd(maxNewLength);
+          console.log(`${indent}  │ ${paddedOldName} │ \x1b[32m${paddedNewName}\x1b[0m │`);
+        }
+
+        console.log(footer);
+      }
+    } else {
+      console.log(`${indent}\x1b[32m📁 ${key}\x1b[0m`);
+      displayNode(value as FileNode, indent + '  ');
+    }
+  }
+}
 
 function displayPreview(results: ProcessedFile[], moviePath: string, tvPath: string) {
   console.log('Proposed folder structure with changes:');
@@ -23,7 +71,7 @@ function displayPreview(results: ProcessedFile[], moviePath: string, tvPath: str
     }
 
     // Build hierarchical structure
-    const root: any = {};
+    const root: FileNode = {};
 
     for (const result of typeResults) {
       const fullPath = path.dirname(result.newPath);
@@ -35,56 +83,18 @@ function displayPreview(results: ProcessedFile[], moviePath: string, tvPath: str
       let current = root;
       for (const part of pathParts) {
         if (!current[part]) {
-          current[part] = {};
+          current[part] = {} as FileNode;
         }
-        current = current[part];
+        current = current[part] as FileNode;
       }
 
-      if (!current._files) {
-        current._files = [];
+      if (!current['_files']) {
+        current['_files'] = [] as FileInfo[];
       }
-      current._files.push({ oldName, newName });
+      (current['_files'] as FileInfo[]).push({ oldName, newName });
     }
 
     // Display hierarchical structure
-    function displayNode(node: any, indent: string = '  ') {
-      for (const [key, value] of Object.entries(node)) {
-        if (key === '_files') {
-          const files = value as { oldName: string; newName: string }[];
-          if (files.length === 1) {
-            console.log(`${indent}📄 ${files[0].oldName} ⮞ \x1b[32m${files[0].newName}\x1b[0m`);
-          } else if (files.length > 1) {
-            console.log(`${indent}📄 Multiple files:`);
-
-            // Calculate max lengths for proper alignment
-            const maxOldLength = Math.max(...files.map(f => f.oldName.length));
-            const maxNewLength = Math.max(...files.map(f => f.newName.length));
-
-            // Create table borders
-            const header = `${indent}  ┌─${'─'.repeat(maxOldLength)}─┬─${'─'.repeat(maxNewLength)}─┐`;
-            const separator = `${indent}  ├─${'─'.repeat(maxOldLength)}─┼─${'─'.repeat(maxNewLength)}─┤`;
-            const footer = `${indent}  └─${'─'.repeat(maxOldLength)}─┴─${'─'.repeat(maxNewLength)}─┘`;
-
-            console.log(header);
-            console.log(`${indent}  │ ${'Old Name'.padEnd(maxOldLength)} │ ${'New Name'.padEnd(maxNewLength)} │`);
-            console.log(separator);
-
-            // Display each file with right-padded old names
-            for (const file of files) {
-              const paddedOldName = file.oldName.padEnd(maxOldLength);
-              const paddedNewName = file.newName.padEnd(maxNewLength);
-              console.log(`${indent}  │ ${paddedOldName} │ \x1b[32m${paddedNewName}\x1b[0m │`);
-            }
-
-            console.log(footer);
-          }
-        } else {
-          console.log(`${indent}\x1b[32m📁 ${key}\x1b[0m`);
-          displayNode(value as any, indent + '  ');
-        }
-      }
-    }
-
     displayNode(root);
     console.log();
   }
@@ -101,7 +111,7 @@ function createProgressBar(total: number) {
   };
 }
 
-export async function handleApply(scanPath: string, argv: any) {
+export async function handleApply(scanPath: string, argv: Record<string, unknown>) {
   console.log('🎬 Media Auto Renamer\n');
 
   // At this point scanPath is guaranteed to be defined
@@ -113,8 +123,8 @@ export async function handleApply(scanPath: string, argv: any) {
   }
 
   // Load config with scanned folder priority
-  let configResult = loadConfig(scanPath);
-  let config = configResult.config;
+  const configResult = loadConfig(scanPath);
+  const config = configResult.config;
 
   // Check API key at startup
   if (!(await validateApiKey(config.omdbApiKey || ''))) {
@@ -177,8 +187,8 @@ export async function handleApply(scanPath: string, argv: any) {
   }
 
   // Step 2: Get destination paths BEFORE scanning
-  let moviePath = argv['movie-path'] || config.moviePath;
-  let tvPath = argv['tv-path'] || config.tvPath;
+  let moviePath = (argv['movie-path'] as string | undefined) || config.moviePath;
+  let tvPath = (argv['tv-path'] as string | undefined) || config.tvPath;
   let omdbApiKey = config.omdbApiKey;
 
   // Always prompt for config if:
@@ -216,7 +226,7 @@ export async function handleApply(scanPath: string, argv: any) {
         type: 'input',
         name: 'moviePath',
         message: 'Enter destination folder for Movies:',
-        default: moviePath || path.join(require('os').homedir(), 'Movies'),
+        default: moviePath || path.join(os.homedir(), 'Movies'),
         validate: (input) => {
           if (!input.trim()) return 'Path cannot be empty';
           try {
@@ -234,7 +244,7 @@ export async function handleApply(scanPath: string, argv: any) {
         type: 'input',
         name: 'tvPath',
         message: 'Enter destination folder for TV Shows:',
-        default: tvPath || path.join(require('os').homedir(), 'TV Shows'),
+        default: tvPath || path.join(os.homedir(), 'TV Shows'),
         validate: (input) => {
           if (!input.trim()) return 'Path cannot be empty';
           try {
