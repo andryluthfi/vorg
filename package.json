@@ -1,6 +1,6 @@
 {
   "name": "vorg",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "description": "Console application to scan, organize, and rename movie and TV series files",
   "main": "dist/index.js",
   "bin": "dist/index.js",
