@@ -1,7 +1,6 @@
 import * as cheerio from 'cheerio';
 import * as fs from 'fs-extra';
 import * as path from 'path';
-import inquirer from 'inquirer';
 import { MediaMetadata, EnrichedMetadata } from '../core-data/parser';
 import { loadConfig } from '../config/config';
 import { getTVEpisode, getTVShowEpisodes, saveTVEpisodeBatch, saveTVShow, saveMovie, getTVShowByImdbID, getMovieByImdbID } from './database';
@@ -9,7 +8,7 @@ import { getTVEpisode, getTVShowEpisodes, saveTVEpisodeBatch, saveTVShow, saveMo
 const OMDB_BASE_URL = 'http://www.omdbapi.com/';
 
 // Session-based cache for search results and user selections
-const searchCache = new Map<string, any[]>();
+const searchCache = new Map<string, any>();
 const selectionCache = new Map<string, string>();
 
 async function getOmdbApiKey(): Promise<string> {
@@ -47,7 +46,7 @@ async function logToFile(message: string) {
 }
 
 
-async function searchAndResolveImdbID(title: string, year?: number, type?: 'movie' | 'series'): Promise<string | null> {
+async function searchAndResolveImdbID(title: string, year?: number): Promise<string | null> {
   const cacheKey = `${title}${year ? `_${year}` : ''}`;
 
   // Check if user has already selected a result for this search term
@@ -58,71 +57,32 @@ async function searchAndResolveImdbID(title: string, year?: number, type?: 'movi
 
   // Check cache first
   if (searchCache.has(cacheKey)) {
-    const cachedResults = searchCache.get(cacheKey)!;
-    if (cachedResults.length === 1) {
-      return cachedResults[0].imdbID;
-    } else if (cachedResults.length > 1) {
-      // Multiple results, ask user
-      const selectedImdbID = await selectFromSearchResults(cachedResults, title);
-      if (selectedImdbID) {
-        // Cache the user's selection
-        selectionCache.set(cacheKey, selectedImdbID);
-      }
-      return selectedImdbID;
-    }
+    const cachedResult = searchCache.get(cacheKey)!;
+    return cachedResult.imdbID;
   }
 
-  // Not in cache, search OMDB
+  // Not in cache, fetch from OMDB using title lookup
   const OMDB_API_KEY = await getOmdbApiKey();
   const searchUrl = new URL(OMDB_BASE_URL);
   searchUrl.searchParams.set('apikey', OMDB_API_KEY);
-  searchUrl.searchParams.set('s', title);
+  searchUrl.searchParams.set('t', title);
   if (year) searchUrl.searchParams.set('y', year.toString());
-  if (type) searchUrl.searchParams.set('type', type === 'series' ? 'series' : 'movie');
   searchUrl.searchParams.set('r', 'json');
 
-  await logToFile(`OMDB Search URL: ${searchUrl.toString()}`);
+  await logToFile(`OMDB Title Lookup URL: ${searchUrl.toString()}`);
   const response = await fetch(searchUrl);
   const searchData = await response.json() as any;
-  await logToFile(`OMDB Search Response: ${JSON.stringify(searchData)}`);
+  await logToFile(`OMDB Title Lookup Response: ${JSON.stringify(searchData)}`);
 
-  if (searchData.Response === 'True' && searchData.Search && searchData.Search.length > 0) {
-    const results = searchData.Search;
-    searchCache.set(cacheKey, results);
-
-    if (results.length === 1) {
-      return results[0].imdbID;
-    } else {
-      // Multiple results, ask user
-      const selectedImdbID = await selectFromSearchResults(results, title);
-      if (selectedImdbID) {
-        // Cache the user's selection
-        selectionCache.set(cacheKey, selectedImdbID);
-      }
-      return selectedImdbID;
-    }
+  if (searchData.Response === 'True') {
+    searchCache.set(cacheKey, searchData);
+    return searchData.imdbID;
   } else {
-    await logToFile(`OMDB Search failed: ${searchData.Error}`);
+    await logToFile(`OMDB Title lookup failed: ${searchData.Error}`);
     return null;
   }
 }
 
-async function selectFromSearchResults(results: any[], title: string): Promise<string | null> {
-  console.log(`\nMultiple matches found for "${title}":`);
-  const choices = results.map((result, index) => ({
-    name: `${index + 1}. ${result.Title} (${result.Year}) - ${result.Type}`,
-    value: result.imdbID
-  }));
-
-  const { selectedImdbID } = await inquirer.prompt({
-    type: 'list',
-    name: 'selectedImdbID',
-    message: 'Please select the correct match:',
-    choices: choices
-  });
-
-  return selectedImdbID;
-}
 
 export async function enrichMetadata(metadata: MediaMetadata): Promise<EnrichedMetadata> {
   await logToFile(`Starting enrichment for: ${JSON.stringify(metadata)}`);
@@ -131,8 +91,7 @@ export async function enrichMetadata(metadata: MediaMetadata): Promise<EnrichedM
 
   try {
     // First, search to resolve IMDb ID
-    const searchType = metadata.type === 'tv' ? 'series' : metadata.type;
-    const imdbID = await searchAndResolveImdbID(metadata.title, metadata.year, searchType as 'movie' | 'series');
+    const imdbID = await searchAndResolveImdbID(metadata.title, metadata.year);
     if (!imdbID) {
       await logToFile(`Could not resolve IMDb ID for: ${metadata.title}`);
       return enriched;
@@ -212,9 +171,37 @@ export async function enrichMetadata(metadata: MediaMetadata): Promise<EnrichedM
 
     if (data.Response === 'True') {
       if (data.Type === 'movie') {
+        await logToFile(`Original movie title: "${data.Title}", Year: "${data.Year}"`);
+        // Clean title: remove year based on data.Year and trim
+        if (data.Year) {
+          const yearPattern = new RegExp(`\\s*\\(${data.Year}\\)\\s*$`);
+          await logToFile(`Attempting to match pattern: "${yearPattern.source}" against title: "${data.Title}"`);
+          const originalTitle = data.Title;
+          data.Title = data.Title.replace(yearPattern, '').trim();
+          if (data.Title !== originalTitle) {
+            await logToFile(`Cleaned movie title (parentheses): "${data.Title}"`);
+          } else {
+            await logToFile(`Parentheses pattern didn't match, trying space-separated year pattern`);
+            // Try to match year at the end with spaces
+            const spaceYearPattern = new RegExp(`\\s+${data.Year}\\s*$`);
+            await logToFile(`Attempting to match space pattern: "${spaceYearPattern.source}" against title: "${data.Title}"`);
+            data.Title = data.Title.replace(spaceYearPattern, '').trim();
+            if (data.Title !== originalTitle) {
+              await logToFile(`Cleaned movie title (space-separated): "${data.Title}"`);
+            } else {
+              await logToFile(`No year pattern matched, title unchanged: "${data.Title}"`);
+            }
+          }
+        } else {
+          await logToFile(`No Year field found, skipping title cleaning`);
+        }
         // Store full movie data in database
         saveMovie(data);
-        await logToFile(`Movie data stored in database: ${data.imdbID}`);
+        await logToFile(`Movie data stored in database: ${data.imdbID} with title: "${data.Title}"`);
+
+        // Verify what was actually stored in database
+        const savedMovie: any = getMovieByImdbID(data.imdbID);
+        await logToFile(`Database verification - stored title: "${savedMovie?.title}"`);
 
         // Enrich metadata with correct title casing
         enriched.title = data.Title; // Update with correct casing

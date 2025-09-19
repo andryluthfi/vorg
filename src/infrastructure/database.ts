@@ -1,10 +1,51 @@
 import { Database } from 'bun:sqlite';
 import * as path from 'path';
+import * as fs from 'fs';
 import { EnrichedMetadata } from '../core-data/parser';
 
-const DB_PATH = path.join(__dirname, '..', 'media.db');
+// Use executable directory for database path instead of __dirname
+const exeDir = path.dirname(process.execPath);
+const DB_PATH = path.join(exeDir, 'media.db');
 
-export let db = new Database(DB_PATH);
+console.log('🔍 Database path:', DB_PATH);
+console.log('🔍 __dirname:', __dirname);
+console.log('🔍 Executable path:', process.execPath);
+console.log('🔍 Executable directory:', exeDir);
+console.log('🔍 Current working directory:', process.cwd());
+
+const dbDir = path.dirname(DB_PATH);
+console.log('🔍 Database directory:', dbDir);
+
+try {
+  if (!fs.existsSync(dbDir)) {
+    console.log('❌ Database directory does not exist, creating...');
+    fs.mkdirSync(dbDir, { recursive: true });
+  } else {
+    console.log('✅ Database directory exists');
+  }
+
+  // Check write permissions
+  fs.accessSync(dbDir, fs.constants.W_OK);
+  console.log('✅ Database directory is writable');
+} catch (error) {
+  console.error('❌ Database directory access error:', error);
+}
+
+console.log('🔍 Checking if media.db exists before opening:', fs.existsSync(DB_PATH));
+
+let db: Database;
+
+try {
+  db = new Database(DB_PATH);
+  console.log('✅ Database opened successfully');
+} catch (error) {
+  console.error('❌ Failed to open database:', error);
+  throw error;
+}
+
+console.log('🔍 Checking if media.db exists after opening:', fs.existsSync(DB_PATH));
+
+export { db };
 
 // Create tables
 db.exec(`

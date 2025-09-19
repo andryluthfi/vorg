@@ -6,6 +6,7 @@ import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
 import { handleRevert } from './action/revert';
 import { handleApply } from './action/apply';
+import { handleVerify } from './action/verify';
 import { handleDbShow } from './action/db';
 import { closeDatabase } from './infrastructure/database';
 
@@ -20,6 +21,7 @@ interface Args {
   noSaveConfig?: boolean;
   count?: number;
   verbose?: boolean;
+  'verify-target'?: boolean;
 }
 
 const argv = yargs(hideBin(process.argv))
@@ -71,6 +73,11 @@ const argv = yargs(hideBin(process.argv))
         type: 'boolean',
         describe: 'Show detailed config information and final merged config',
         default: false
+      })
+      .option('verify-target', {
+        type: 'boolean',
+        describe: 'Verify and fix misplaced TV shows in movie folders and vice versa',
+        default: false
       });
   })
   .help()
@@ -112,7 +119,11 @@ async function main() {
     }
   }
 
-  await handleApply(scanPath!, argv);
+  if (argv['verify-target']) {
+    await handleVerify(scanPath!, argv);
+  } else {
+    await handleApply(scanPath!, argv);
+  }
 }
 
 

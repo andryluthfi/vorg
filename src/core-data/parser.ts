@@ -20,9 +20,21 @@ export interface EnrichedMetadata extends MediaMetadata {
 export function parseFilename(filename: string): MediaMetadata {
   const parsed = parseTorrentName(filename);
 
+  let title = parsed.title || filename;
+  let year = parsed.year;
+
+  // If year not extracted but title ends with 4-digit year, extract it
+  if (!year) {
+    const yearMatch = title.match(/(\d{4})$/);
+    if (yearMatch) {
+      year = parseInt(yearMatch[1]);
+      title = title.replace(/\s*\d{4}$/, '').trim();
+    }
+  }
+
   const metadata: MediaMetadata = {
-    title: parsed.title || filename,
-    year: parsed.year,
+    title: title,
+    year: year,
     season: parsed.season,
     episode: parsed.episode,
     type: (parsed.season && parsed.episode) ? 'tv' : 'movie'
@@ -79,7 +91,10 @@ export function generateNewName(metadata: EnrichedMetadata): string {
   let name = '';
 
   if (metadata.type === 'movie') {
-    name = `${metadata.title}${metadata.year ? ` (${metadata.year})` : ''}`;
+    name = metadata.title;
+    if (metadata.year) {
+      name += ` (${metadata.year})`;
+    }
   } else {
     // TV show
     name = `${metadata.title}`;
