@@ -2,6 +2,13 @@ import { Database } from 'bun:sqlite';
 import * as path from 'path';
 import * as fs from 'fs';
 
+interface FileMove {
+  id: number;
+  original_path: string;
+  new_path: string;
+  timestamp: string;
+}
+
 // Use executable directory for database path instead of __dirname
 const exeDir = path.dirname(process.execPath);
 const DB_PATH = path.join(exeDir, 'media.db');
@@ -326,14 +333,14 @@ export function saveFileMove(originalPath: string, newPath: string): void {
   `).run(originalPath, newPath);
 }
 
-export function getRecentMoves(): Record<string, unknown>[] {
+export function getRecentMoves(): FileMove[] {
   const stmt = db.prepare('SELECT * FROM file_moves ORDER BY timestamp DESC LIMIT 100');
-  return stmt.all() as Record<string, unknown>[];
+  return stmt.all() as FileMove[];
 }
 
-export function revertLastMoves(count: number = 10): Record<string, unknown>[] {
+export function revertLastMoves(count: number = 10): FileMove[] {
   const stmt = db.prepare('SELECT * FROM file_moves ORDER BY timestamp DESC LIMIT ?');
-  const moves = stmt.all(count) as Record<string, unknown>[];
+  const moves = stmt.all(count) as FileMove[];
   return moves;
 }
 
