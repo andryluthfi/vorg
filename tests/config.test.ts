@@ -70,9 +70,9 @@ describe("loadConfig", () => {
 
     const result = loadConfig(scanPath);
 
-    // Should load from other sources (user folder in this case)
+    // Should default to scanned folder source when no config exists
     expect(result.config).toBeDefined();
-    expect(result.source).toBe('User Folder');
+    expect(result.source).toBe('Scanned Folder');
   });
 
   test("should provide config sources information", () => {

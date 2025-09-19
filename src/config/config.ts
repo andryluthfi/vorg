@@ -78,7 +78,8 @@ export function loadConfig(scanPath?: string): ConfigResult {
   }
 
   // Determine primary source for backward compatibility
-  const primarySource = sources.find(s => s.exists) || sources[0];
+  // If scanPath provided, always use scanned folder as source, even if config loaded from elsewhere
+  const primarySource = scanPath ? sources[0] : (sources.find(s => s.exists) || sources[1]);
   const source = primarySource ? primarySource.location : 'None';
   const configPath = primarySource ? primarySource.path : null;
 
