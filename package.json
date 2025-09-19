@@ -1,0 +1,46 @@
+{
+  "name": "vorg",
+  "version": "1.0.0",
+  "description": "Console application to scan, organize, and rename movie and TV series files",
+  "main": "dist/index.js",
+  "bin": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "build:exe": "bun build --compile src/index.ts --outfile dist/vorg.exe",
+    "start": "bun dist/index.js",
+    "dev": "bun src/index.ts",
+    "test": "bun test",
+    "lint": "eslint src/**/*.ts tests/**/*.ts",
+    "pkg": "pkg . --out-path dist"
+  },
+  "keywords": [
+    "media",
+    "renamer",
+    "organizer",
+    "typescript"
+  ],
+  "author": "Andry Luthfi",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/fs-extra": "^11.0.4",
+    "@types/inquirer": "^9.0.9",
+    "@types/node": "^20.0.0",
+    "@types/yargs": "^17.0.33",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "cheerio": "^1.0.0-rc.12",
+    "fs-extra": "^11.2.0",
+    "inquirer": "^8.2.6",
+    "parse-torrent-name": "^0.5.4",
+    "pkg": "^5.8.1",
+    "yargs": "^18.0.0"
+  },
+  "pkg": {
+    "scripts": "dist/**/*.js",
+    "assets": "dist/**/*.db",
+    "targets": ["node18-win-x64", "node18-linux-x64", "node18-macos-x64"],
+    "exclude": ["undici"]
+  }
+}

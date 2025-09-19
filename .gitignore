@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+*.exe
+*.bun-build
+
+# Databases
+*.db
+src/media.db
+
+# Logs
+*.log
+api_enrichment.log
+
+# Environment variables
+.env
+.env.local
+
+# Config files with sensitive info
+media-renamer-config.json
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.cursor/
+
+# Temporary files
+*.tmp
+*.temp
