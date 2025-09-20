@@ -148,6 +148,7 @@ export function parseFilename(filename: string, fullPath?: string, rootScanPath?
     if (folderMetadata.type && type === 'movie' && (season || episode)) {
       type = 'tv';
     }
+
   }
 
   const metadata: MediaMetadata = {
@@ -219,7 +220,7 @@ function parseFolderNames(fullPath: string, rootScanPath: string): { folderMetad
       cleanTitle = cleanTitle.replace(/\s*\.(MULTI|WEB-DL|SDR|H265|H264|AAC|AC3|DDP5\.1|2160p|1080p|720p|480p).*$/i, '');
       cleanTitle = cleanTitle.replace(/\s+(MULTI|WEB-DL|SDR|H265|H264|AAC|AC3|DDP5\.1|2160p|1080p|720p|480p)(\s+|$)/i, ''); // Remove space-separated release info
       cleanTitle = cleanTitle.replace(/\s+S\d+(E\d+)?(\s+|$)/i, ''); // Remove season info with surrounding spaces
-      cleanTitle = cleanTitle.replace(/S\d+(E\d+)?$/i, ''); // Remove season info at end
+      cleanTitle = cleanTitle.replace(/S\d+(E\d+)?(-S\d+(E\d+)?)*$/i, ''); // Remove season info at end, including ranges like S01-S02
       cleanTitle = cleanTitle.replace(/\s+/g, ' ').trim();
       if (cleanTitle) {
         folderMetadata.title = cleanTitle;
