@@ -18,6 +18,43 @@ interface FileNode {
   [key: string]: FileNode | FileInfo[];
 }
 
+/**
+ * Recursively displays a hierarchical file structure with visual formatting.
+ * Shows directories with 📁 and files with 📄, using indentation for nesting.
+ * For multiple files in a directory, displays them in a table format with old/new names.
+ *
+ * @function displayNode
+ * @param {FileNode} node - The hierarchical node structure to display
+ * @param {string} [indent='  '] - Indentation string for nesting levels
+ * @returns {void}
+ *
+ * @example
+ * const node = {
+ *   'Movies': {
+ *     '_files': [{ oldName: 'movie.avi', newName: 'Movie (2020).avi' }]
+ *   }
+ * };
+ * displayNode(node);
+ * // Output:
+ * // 📁 Movies
+ * //   📄 movie.avi ⮞ Movie (2020).avi
+ *
+ * @example
+ * // Edge case: Empty node
+ * displayNode({});
+ * // No output
+ *
+ * @example
+ * // Edge case: Multiple files in directory
+ * const node = {
+ *   '_files': [
+ *     { oldName: 'file1.avi', newName: 'File1.avi' },
+ *     { oldName: 'file2.avi', newName: 'File2.avi' }
+ *   ]
+ * };
+ * displayNode(node);
+ * // Displays table format
+ */
 function displayNode(node: FileNode, indent: string = '  ') {
   for (const [key, value] of Object.entries(node)) {
     if (key === '_files') {
@@ -56,6 +93,44 @@ function displayNode(node: FileNode, indent: string = '  ') {
   }
 }
 
+/**
+ * Displays a preview of the proposed folder structure changes for movies and TV shows.
+ * Shows the hierarchical organization with old and new file names, grouped by type.
+ *
+ * @function displayPreview
+ * @param {ProcessedFile[]} results - Array of processed files with their new paths
+ * @param {string} moviePath - Destination path for movies
+ * @param {string} tvPath - Destination path for TV shows
+ * @returns {void}
+ *
+ * @example
+ * const results = [{
+ *   originalPath: '/old/movie.avi',
+ *   newPath: '/movies/Movie (2020)/Movie (2020).avi',
+ *   metadata: { type: 'movie', title: 'Movie', year: 2020 }
+ * }];
+ * displayPreview(results, '/movies', '/tv');
+ * // Output:
+ * // 🎥 MOVIE: /movies
+ * // 📁 Movie (2020)
+ * //   📄 movie.avi ⮞ Movie (2020).avi
+ *
+ * @example
+ * // Edge case: No files for a type
+ * displayPreview([], '/movies', '/tv');
+ * // Output:
+ * // 🎥 MOVIE: /movies
+ * //   (no files)
+ *
+ * @example
+ * // Edge case: Mixed movie and TV files
+ * const results = [
+ *   { metadata: { type: 'movie' }, ... },
+ *   { metadata: { type: 'tv' }, ... }
+ * ];
+ * displayPreview(results, '/movies', '/tv');
+ * // Shows both sections
+ */
 function displayPreview(results: ProcessedFile[], moviePath: string, tvPath: string) {
   console.log('Proposed folder structure with changes:');
 
@@ -100,6 +175,29 @@ function displayPreview(results: ProcessedFile[], moviePath: string, tvPath: str
   }
 }
 
+/**
+ * Creates a progress bar object for tracking metadata enrichment progress.
+ * Updates the console with current progress percentage on each update call.
+ *
+ * @function createProgressBar
+ * @param {number} total - Total number of items to process
+ * @returns {Object} Progress bar object with update method
+ * @returns {function} returns.update - Function to increment progress and update display
+ *
+ * @example
+ * const progress = createProgressBar(100);
+ * for (let i = 0; i < 100; i++) {
+ *   // Perform metadata enrichment
+ *   await enrichMetadata(file);
+ *   progress.update();
+ * }
+ * // Console output: 🔍 Enriching metadata... 50/100 (50%)
+ *
+ * @example
+ * // Edge case: Total is 0
+ * const progress = createProgressBar(0);
+ * progress.update(); // No division by zero, handles gracefully
+ */
 function createProgressBar(total: number) {
   let current = 0;
   return {
@@ -111,6 +209,60 @@ function createProgressBar(total: number) {
   };
 }
 
+/**
+ * Main handler for the apply command - orchestrates the complete media file organization workflow.
+ * Loads configuration, scans for media files, enriches metadata via OMDB API, previews changes,
+ * and organizes files into proper directory structure with conflict resolution.
+ *
+ * Workflow steps:
+ * 1. Validate scan path and resolve to absolute
+ * 2. Load and validate configuration (moviePath, tvPath, omdbApiKey)
+ * 3. Prompt for missing configuration if needed
+ * 4. Scan directory for media files
+ * 5. Parse filenames and enrich metadata for video files
+ * 6. Preview proposed folder structure
+ * 7. Confirm changes with user
+ * 8. Organize files with conflict handling
+ *
+ * @async
+ * @function handleApply
+ * @param {string} scanPath - Path to scan for media files (can be relative)
+ * @param {Record<string, unknown>} argv - Parsed command line arguments
+ * @returns {Promise<void>}
+ * @throws {Error} If scan path doesn't exist, config validation fails, or file operations error
+ *
+ * @example
+ * // Basic usage
+ * await handleApply('/path/to/media', { verbose: true });
+ *
+ * @example
+ * // With custom paths
+ * await handleApply('/downloads', {
+ *   'movie-path': '/movies',
+ *   'tv-path': '/tvshows',
+ *   interactive: true
+ * });
+ *
+ * @example
+ * // Edge case: No media files found
+ * await handleApply('/empty/directory', {});
+ * // Output: No media files found.
+ *
+ * @example
+ * // Edge case: Invalid API key, prompts for new one
+ * await handleApply('/path', {});
+ * // Validates API key, prompts if invalid
+ *
+ * @example
+ * // Edge case: File conflicts during organization
+ * await handleApply('/path', {});
+ * // Prompts user to skip or overwrite conflicting files
+ *
+ * @example
+ * // Edge case: Parent directory doesn't exist
+ * await handleApply('/invalid/path', {});
+ * // Throws error: scan path parent directory does not exist
+ */
 export async function handleApply(scanPath: string, argv: Record<string, unknown>) {
   console.log('🎬 Media Auto Renamer\n');
 
@@ -377,6 +529,27 @@ export async function handleApply(scanPath: string, argv: Record<string, unknown
   }
 
   // Step 6: Organize files
+  /**
+   * Handles file conflict resolution by prompting user for action when a target file already exists.
+   * Presents options to skip the move or overwrite the existing file.
+   *
+   * @async
+   * @function conflictHandler
+   * @param {string} original - Original file path being moved
+   * @param {string} newPath - Target path that conflicts with existing file
+   * @returns {Promise<'skip' | 'overwrite'>} User's chosen action
+   *
+   * @example
+   * const action = await conflictHandler('/old/movie.avi', '/new/movie.avi');
+   * // Prompts: "File already exists: movie.avi"
+   * // Options: Skip, Overwrite
+   * // Returns: 'skip' or 'overwrite'
+   *
+   * @example
+   * // Edge case: Same file (original === newPath)
+   * const action = await conflictHandler('/file.avi', '/file.avi');
+   * // Still prompts for action
+   */
   const conflictHandler = async (original: string, newPath: string): Promise<'skip' | 'overwrite'> => {
     const { action } = await inquirer.prompt({
       type: 'list',

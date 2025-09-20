@@ -18,6 +18,38 @@ export interface EnrichedMetadata extends MediaMetadata {
   imdbRating?: string;
 }
 
+/**
+ * Parses a media filename to extract metadata like title, year, season, episode, etc.
+ * Uses regex patterns to identify different media types and extract structured information.
+ * Supports movies, TV shows, and episodes with various naming conventions.
+ *
+ * @function parseFilename
+ * @param {string} filename - Media filename to parse (without path)
+ * @returns {MediaMetadata} Extracted metadata object
+ *
+ * @example
+ * parseFilename('Movie.Title.2020.1080p.BluRay.x264.mp4');
+ * // Returns: { type: 'movie', title: 'Movie Title', year: 2020, ... }
+ *
+ * @example
+ * parseFilename('TV.Show.S01E01.720p.HDTV.x264.mkv');
+ * // Returns: { type: 'tv', title: 'TV Show', season: 1, episode: 1, ... }
+ *
+ * @example
+ * // Edge case: No year in movie title
+ * parseFilename('Old Movie.avi');
+ * // Returns: { type: 'movie', title: 'Old Movie', year: undefined, ... }
+ *
+ * @example
+ * // Edge case: Special episode
+ * parseFilename('TV.Show.S01E00.Pilot.mkv');
+ * // Returns: { type: 'tv', title: 'TV Show', season: 1, episode: 0, ... }
+ *
+ * @example
+ * // Edge case: Invalid filename
+ * parseFilename('randomfile.txt');
+ * // Returns: { type: 'unknown', title: 'randomfile', ... }
+ */
 export function parseFilename(filename: string): MediaMetadata {
   const parsed = parseTorrentName(filename);
 
@@ -44,6 +76,37 @@ export function parseFilename(filename: string): MediaMetadata {
   return metadata;
 }
 
+/**
+ * Sanitizes a filename by removing or replacing invalid filesystem characters.
+ * Replaces problematic characters with safe alternatives for cross-platform compatibility.
+ *
+ * @function sanitizeFilename
+ * @param {string} filename - Filename to sanitize
+ * @returns {string} Sanitized filename safe for filesystem use
+ *
+ * @example
+ * sanitizeFilename('Movie: Title (2020)');
+ * // Returns: 'Movie - Title (2020)'
+ *
+ * @example
+ * sanitizeFilename('TV/Show*Name?');
+ * // Returns: 'TV-Show-Name-'
+ *
+ * @example
+ * // Edge case: Empty string
+ * sanitizeFilename('');
+ * // Returns: ''
+ *
+ * @example
+ * // Edge case: Only invalid characters
+ * sanitizeFilename('?*<>|');
+ * // Returns: '----'
+ *
+ * @example
+ * // Edge case: Already clean
+ * sanitizeFilename('Clean.Name.2020');
+ * // Returns: 'Clean.Name.2020'
+ */
 export function sanitizeFilename(filename: string): string {
   // Windows forbidden characters - replace with safe alternatives
   const windowsReplacements: { [key: string]: string } = {
@@ -89,6 +152,40 @@ export function sanitizeFilename(filename: string): string {
   return sanitized;
 }
 
+/**
+ * Generates a standardized filename based on enriched metadata.
+ * Creates consistent naming format for organized media library.
+ *
+ * Format rules:
+ * - Movies: "Title (Year)"
+ * - TV Episodes: "Title - Season X Episode Y" or with episode title
+ *
+ * @function generateNewName
+ * @param {EnrichedMetadata} metadata - Enriched metadata with title, year, season, episode, etc.
+ * @returns {string} Standardized filename without extension
+ *
+ * @example
+ * const metadata = { type: 'movie', title: 'The Matrix', year: 1999 };
+ * generateNewName(metadata);
+ * // Returns: 'The Matrix (1999)'
+ *
+ * @example
+ * const metadata = { type: 'tv', title: 'Breaking Bad', season: 1, episode: 1, episodeTitle: 'Pilot' };
+ * generateNewName(metadata);
+ * // Returns: 'Breaking Bad - Season 1 Episode 1 - Pilot'
+ *
+ * @example
+ * // Edge case: No year for movie
+ * const metadata = { type: 'movie', title: 'Old Movie' };
+ * generateNewName(metadata);
+ * // Returns: 'Old Movie'
+ *
+ * @example
+ * // Edge case: No episode title
+ * const metadata = { type: 'tv', title: 'Show', season: 1, episode: 5 };
+ * generateNewName(metadata);
+ * // Returns: 'Show - Season 1 Episode 5'
+ */
 export function generateNewName(metadata: EnrichedMetadata): string {
   let name = '';
 

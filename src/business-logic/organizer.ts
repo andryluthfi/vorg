@@ -11,6 +11,50 @@ export interface ProcessedFile {
   action: 'move' | 'skip' | 'overwrite' | 'preview';
 }
 
+/**
+ * Organizes media files into proper directory structure based on enriched metadata.
+ * Processes video files and attempts to match subtitle files to corresponding videos.
+ * Handles file conflicts through callback and supports preview mode.
+ *
+ * Organization rules:
+ * - Movies: /moviePath/MovieTitle (Year)/MovieTitle (Year).ext
+ * - TV Shows: /tvPath/ShowTitle (Year)/Season X/ShowTitle - Season X Episode Y.ext
+ * - Subtitles: Placed in same directory as matching video file
+ *
+ * @async
+ * @function organizeFiles
+ * @param {MediaFile[]} files - Array of media files to organize
+ * @param {EnrichedMetadata[]} metadatas - Corresponding enriched metadata for video files
+ * @param {string} moviePath - Destination root path for movies
+ * @param {string} tvPath - Destination root path for TV shows
+ * @param {(original: string, newPath: string) => Promise<'skip' | 'overwrite'>} onConflict - Callback for handling file conflicts
+ * @param {boolean} [preview=false] - If true, only preview changes without moving files
+ * @returns {Promise<ProcessedFile[]>} Array of processed files with their actions and paths
+ * @throws {Error} If file move operations fail (logged but continues with other files)
+ *
+ * @example
+ * const files = [{ name: 'Movie.2020.avi', path: '/old/Movie.2020.avi', type: 'video' }];
+ * const metadatas = [{ type: 'movie', title: 'Movie', year: 2020 }];
+ * const results = await organizeFiles(files, metadatas, '/movies', '/tv', async () => 'overwrite');
+ * // Moves file to /movies/Movie (2020)/Movie (2020).avi
+ *
+ * @example
+ * // Preview mode
+ * const results = await organizeFiles(files, metadatas, '/movies', '/tv', async () => 'skip', true);
+ * // Returns preview results without moving files
+ *
+ * @example
+ * // Edge case: Subtitle without matching video
+ * const subtitleFiles = [{ name: 'Movie.srt', path: '/old/Movie.srt', type: 'subtitle' }];
+ * const results = await organizeFiles(subtitleFiles, [], '/movies', '/tv', async () => 'skip');
+ * // Subtitle marked as skipped
+ *
+ * @example
+ * // Edge case: File conflict
+ * const results = await organizeFiles(files, metadatas, '/movies', '/tv',
+ *   async (orig, newPath) => { console.log('Conflict!'); return 'overwrite'; });
+ * // Calls onConflict callback for resolution
+ */
 export async function organizeFiles(
   files: MediaFile[],
   metadatas: EnrichedMetadata[],
@@ -169,7 +213,32 @@ export async function organizeFiles(
   return results;
 }
 
-// Helper function to check if subtitle name is similar to video name
+/**
+ * Determines if a subtitle filename is similar to a video filename for matching purposes.
+ * Removes common subtitle language codes and compares cleaned names.
+ * Used to associate subtitle files with their corresponding video files.
+ *
+ * @function isSimilarName
+ * @param {string} subtitleName - Subtitle filename to compare
+ * @param {string} videoName - Video filename to compare against
+ * @returns {boolean} True if names are considered similar
+ *
+ * @example
+ * isSimilarName('Movie.2020.eng.srt', 'Movie.2020.avi'); // true
+ * isSimilarName('Different.eng.srt', 'Movie.2020.avi'); // false
+ *
+ * @example
+ * // Edge case: Language codes removed
+ * isSimilarName('Movie.2020.english.srt', 'Movie.2020.avi'); // true
+ *
+ * @example
+ * // Edge case: Special characters normalized
+ * isSimilarName('Movie-2020.eng.srt', 'Movie.2020.avi'); // true
+ *
+ * @example
+ * // Edge case: Empty strings
+ * isSimilarName('', 'Movie.avi'); // false
+ */
 function isSimilarName(subtitleName: string, videoName: string): boolean {
   // Remove common subtitle suffixes and compare
   const cleanSubtitle = subtitleName

@@ -18,6 +18,37 @@ interface VerificationResult {
   emptyFolders: string[];
 }
 
+/**
+ * Verifies and fixes misplaced media files by checking if they are in correct locations based on metadata.
+ * Scans media files, determines correct paths, identifies misplaced files and empty folders,
+ * displays results, and optionally moves files to correct locations and removes empty folders.
+ *
+ * @async
+ * @function handleVerify
+ * @param {string} scanPath - Path to scan for media files
+ * @param {Record<string, unknown>} argv - Command line arguments
+ * @returns {Promise<void>}
+ * @throws {Error} If configuration is missing or file operations fail
+ *
+ * @example
+ * // Verify files in current directory
+ * await handleVerify('.', { 'movie-path': '/movies', 'tv-path': '/tv' });
+ *
+ * @example
+ * // Edge case: No media files found
+ * await handleVerify('/empty/dir', {});
+ * // Output: No media files found.
+ *
+ * @example
+ * // Edge case: Missing configuration
+ * await handleVerify('/path', {});
+ * // Error: Movie path and TV path must be configured
+ *
+ * @example
+ * // Edge case: All files correctly placed
+ * await handleVerify('/organized', {});
+ * // Output: All files are in their correct locations!
+ */
 export async function handleVerify(scanPath: string, argv: Record<string, unknown>) {
   console.log('🔍 Media Target Verification\n');
 
@@ -79,6 +110,30 @@ export async function handleVerify(scanPath: string, argv: Record<string, unknow
   closeDatabase();
 }
 
+/**
+ * Analyzes media files to determine if they are in correct locations based on their metadata.
+ * Enriches metadata for video files, calculates correct paths, identifies misplaced files,
+ * and detects empty folders that can be removed.
+ *
+ * @async
+ * @function verifyFileLocations
+ * @param {MediaFile[]} mediaFiles - Array of media files to verify
+ * @param {string} moviePath - Destination path for movies
+ * @param {string} tvPath - Destination path for TV shows
+ * @param {string} scanPath - Original scan path
+ * @returns {Promise<VerificationResult>} Results containing misplaced files and empty folders
+ *
+ * @example
+ * const files = [{ name: 'Movie.2020.avi', path: '/wrong/path/Movie.2020.avi', type: 'video' }];
+ * const result = await verifyFileLocations(files, '/movies', '/tv', '/scan');
+ * // Returns misplaced files and empty folders
+ *
+ * @example
+ * // Edge case: Subtitle file (no enrichment)
+ * const files = [{ name: 'Movie.srt', path: '/path/Movie.srt', type: 'subtitle' }];
+ * const result = await verifyFileLocations(files, '/movies', '/tv', '/scan');
+ * // Uses basic metadata without API enrichment
+ */
 async function verifyFileLocations(mediaFiles: MediaFile[], moviePath: string, tvPath: string, scanPath: string): Promise<VerificationResult> {
   const misplacedFiles: VerificationResult['misplacedFiles'] = [];
   const emptyFolders = new Set<string>();
@@ -168,6 +223,32 @@ async function verifyFileLocations(mediaFiles: MediaFile[], moviePath: string, t
   };
 }
 
+/**
+ * Displays the results of the verification process in a readable format.
+ * Shows details of misplaced files with current/correct paths and reasons,
+ * and lists empty folders that will be removed.
+ *
+ * @function displayVerificationResults
+ * @param {VerificationResult} results - Verification results to display
+ * @returns {void}
+ *
+ * @example
+ * const results = {
+ *   misplacedFiles: [{
+ *     currentPath: '/tv/Movie.avi',
+ *     correctPath: '/movies/Movie/Movie.avi',
+ *     reason: 'Movie file found in TV shows directory'
+ *   }],
+ *   emptyFolders: ['/old/empty/folder']
+ * };
+ * displayVerificationResults(results);
+ * // Displays formatted results with file details and empty folders
+ *
+ * @example
+ * // Edge case: No issues found
+ * displayVerificationResults({ misplacedFiles: [], emptyFolders: [] });
+ * // No output (handled in handleVerify)
+ */
 function displayVerificationResults(results: VerificationResult) {
   console.log('📋 Verification Results:\n');
 
@@ -192,6 +273,33 @@ function displayVerificationResults(results: VerificationResult) {
   }
 }
 
+/**
+ * Executes the verification plan by moving misplaced files to correct locations
+ * and removing identified empty folders.
+ *
+ * @async
+ * @function executeVerificationPlan
+ * @param {VerificationResult} results - Verification results containing actions to execute
+ * @returns {Promise<void>}
+ *
+ * @example
+ * const results = {
+ *   misplacedFiles: [{ currentPath: '/wrong/file.avi', correctPath: '/correct/file.avi' }],
+ *   emptyFolders: ['/empty/folder']
+ * };
+ * await executeVerificationPlan(results);
+ * // Moves file and removes empty folder
+ *
+ * @example
+ * // Edge case: Move fails (destination not writable)
+ * await executeVerificationPlan(results);
+ * // Logs error but continues with other operations
+ *
+ * @example
+ * // Edge case: Empty results
+ * await executeVerificationPlan({ misplacedFiles: [], emptyFolders: [] });
+ * // Does nothing
+ */
 async function executeVerificationPlan(results: VerificationResult) {
   console.log('🔄 Executing verification plan...\n');
 

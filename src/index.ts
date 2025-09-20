@@ -83,6 +83,50 @@ const argv = yargs(hideBin(process.argv))
   .argv as Args;
 
 
+/**
+ * Main entry point for the Media Auto Renamer CLI application.
+ * Processes command line arguments, validates inputs, and dispatches to appropriate command handlers.
+ * Supports commands: apply (default), revert, db show, verify.
+ *
+ * The function handles different CLI commands by checking argv._[0]:
+ * - 'revert': Calls handleRevert with optional count
+ * - 'db show': Calls handleDbShow
+ * - 'verify': Calls handleVerify with scan path
+ * - Default: Calls handleApply with scan path
+ *
+ * @async
+ * @function main
+ * @returns {Promise<void>} Resolves when the application completes successfully
+ * @throws {Error} If scan path validation fails or command handlers throw errors
+ *
+ * @example
+ * // Run default apply command on current directory
+ * node dist/index.js
+ *
+ * @example
+ * // Run apply command on specific path
+ * node dist/index.js /path/to/media
+ *
+ * @example
+ * // Revert last 3 moves
+ * node dist/index.js revert --count 3
+ *
+ * @example
+ * // Show database contents
+ * node dist/index.js db show
+ *
+ * @example
+ * // Verify files with interactive mode
+ * node dist/index.js /path/to/media --verify-target --interactive
+ *
+ * @example
+ * // Edge case: No scan path provided, uses current directory
+ * node dist/index.js
+ *
+ * @example
+ * // Edge case: Invalid command, falls back to apply
+ * node dist/index.js invalid-command /path/to/media
+ */
 async function main() {
   // Handle commands
   if (argv._[0] === 'revert') {

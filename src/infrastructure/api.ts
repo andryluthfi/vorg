@@ -104,12 +104,57 @@ interface SeasonResponse {
 const searchCache = new Map<string, Record<string, unknown>>();
 const selectionCache = new Map<string, string>();
 
+/**
+ * Retrieves the OMDB API key from configuration or environment variables.
+ * Checks config file first, then environment variable, falls back to placeholder.
+ *
+ * @async
+ * @function getOmdbApiKey
+ * @returns {Promise<string>} OMDB API key or placeholder value
+ *
+ * @example
+ * const apiKey = await getOmdbApiKey();
+ * // Returns configured API key or 'your_api_key_here'
+ *
+ * @example
+ * // Edge case: No config or env var
+ * const apiKey = await getOmdbApiKey();
+ * // Returns: 'your_api_key_here'
+ */
 async function getOmdbApiKey(): Promise<string> {
   const configResult = loadConfig();
   const apiKey = configResult.config.omdbApiKey || process.env.OMDB_API_KEY || 'your_api_key_here';
   return apiKey;
 }
 
+/**
+ * Validates an OMDB API key by making a test request to the API.
+ * Tests with a known movie title to verify the key works.
+ *
+ * @async
+ * @function validateApiKey
+ * @param {string} apiKey - The API key to validate
+ * @returns {Promise<boolean>} True if API key is valid, false otherwise
+ *
+ * @example
+ * const isValid = await validateApiKey('your_api_key');
+ * // Returns: true if key is valid
+ *
+ * @example
+ * // Edge case: Empty or placeholder key
+ * const isValid = await validateApiKey('');
+ * // Returns: false
+ *
+ * @example
+ * // Edge case: Invalid key
+ * const isValid = await validateApiKey('invalid_key');
+ * // Returns: false
+ *
+ * @example
+ * // Edge case: Network error
+ * const isValid = await validateApiKey('valid_key');
+ * // Returns: false (due to network issues)
+ */
 export async function validateApiKey(apiKey: string): Promise<boolean> {
   if (!apiKey || apiKey.trim() === '' || apiKey === 'your_api_key_here') {
     return false;
@@ -127,6 +172,24 @@ export async function validateApiKey(apiKey: string): Promise<boolean> {
   }
 }
 
+/**
+ * Appends a timestamped message to the API enrichment log file.
+ * Creates the log file if it doesn't exist, writes to current working directory.
+ *
+ * @async
+ * @function logToFile
+ * @param {string} message - Message to log
+ * @returns {Promise<void>}
+ *
+ * @example
+ * await logToFile('Starting metadata enrichment');
+ * // Appends: [2023-12-01T10:00:00.000Z] Starting metadata enrichment
+ *
+ * @example
+ * // Edge case: Write permission denied
+ * await logToFile('Test message');
+ * // Logs error to console, doesn't throw
+ */
 async function logToFile(message: string) {
   const logPath = path.join(process.cwd(), 'api_enrichment.log');
   const timestamp = new Date().toISOString();
@@ -139,6 +202,31 @@ async function logToFile(message: string) {
 }
 
 
+/**
+ * Searches OMDB API for a movie/TV show and returns its IMDb ID.
+ * Uses caching to avoid repeated API calls for the same search.
+ * Handles user selections for ambiguous results (though simplified here).
+ *
+ * @async
+ * @function searchAndResolveImdbID
+ * @param {string} title - Title to search for
+ * @param {number} [year] - Optional release year for more accurate results
+ * @returns {Promise<string | null>} IMDb ID if found, null if not found or failed
+ *
+ * @example
+ * const imdbID = await searchAndResolveImdbID('The Matrix', 1999);
+ * // Returns: 'tt0133093'
+ *
+ * @example
+ * // Edge case: Title not found
+ * const imdbID = await searchAndResolveImdbID('NonExistentMovie');
+ * // Returns: null
+ *
+ * @example
+ * // Edge case: Network error
+ * const imdbID = await searchAndResolveImdbID('Movie Title');
+ * // Returns: null, logs error
+ */
 async function searchAndResolveImdbID(title: string, year?: number): Promise<string | null> {
   const cacheKey = `${title}${year ? `_${year}` : ''}`;
 
@@ -177,6 +265,45 @@ async function searchAndResolveImdbID(title: string, year?: number): Promise<str
 }
 
 
+/**
+ * Enriches basic media metadata with additional information from OMDB API and local database.
+ * Resolves IMDb ID, fetches detailed information, and caches results in database.
+ * Handles both movies and TV shows/episodes with appropriate data enrichment.
+ *
+ * Enrichment process:
+ * 1. Resolve IMDb ID from title/year
+ * 2. Check local database for existing data
+ * 3. Fetch from OMDB API if not in database
+ * 4. Store fetched data in database for future use
+ * 5. Return enriched metadata with correct title casing and additional fields
+ *
+ * @async
+ * @function enrichMetadata
+ * @param {MediaMetadata} metadata - Basic metadata to enrich
+ * @returns {Promise<EnrichedMetadata>} Enriched metadata with additional API data
+ * @throws {Error} If API requests fail (logged but not thrown)
+ *
+ * @example
+ * const basic = { type: 'movie', title: 'the matrix', year: 1999 };
+ * const enriched = await enrichMetadata(basic);
+ * // Returns: { ...basic, title: 'The Matrix', plot: '...', genre: 'Action, Sci-Fi', ... }
+ *
+ * @example
+ * // Edge case: Title not found in OMDB
+ * const enriched = await enrichMetadata({ type: 'movie', title: 'Unknown Movie' });
+ * // Returns: original metadata unchanged
+ *
+ * @example
+ * // Edge case: Network/API error
+ * const enriched = await enrichMetadata(metadata);
+ * // Returns: original metadata, logs error
+ *
+ * @example
+ * // Edge case: TV episode enrichment
+ * const episode = { type: 'tv', title: 'Breaking Bad', season: 1, episode: 1 };
+ * const enriched = await enrichMetadata(episode);
+ * // Returns: enriched with episode-specific data
+ */
 export async function enrichMetadata(metadata: MediaMetadata): Promise<EnrichedMetadata> {
   await logToFile(`Starting enrichment for: ${JSON.stringify(metadata)}`);
 
@@ -342,6 +469,38 @@ export async function enrichMetadata(metadata: MediaMetadata): Promise<EnrichedM
 }
 
 
+/**
+ * Fetches all episodes for a TV season from OMDB API and stores them in the database.
+ * Retrieves season data, processes each episode, and batches them for database storage.
+ * Uses series data from database to fill in missing episode information.
+ *
+ * @async
+ * @function fetchAndStoreTVSeason
+ * @param {string} seriesImdbID - IMDb ID of the TV series
+ * @param {number} season - Season number to fetch
+ * @param {string} apiKey - OMDB API key for requests
+ * @returns {Promise<void>}
+ * @throws {Error} If API requests fail (logged but not thrown)
+ *
+ * @example
+ * await fetchAndStoreTVSeason('tt0903747', 1, 'your_api_key');
+ * // Fetches and stores all episodes of Breaking Bad Season 1
+ *
+ * @example
+ * // Edge case: Series not in database
+ * await fetchAndStoreTVSeason('tt1234567', 1, 'api_key');
+ * // Logs error and returns without storing
+ *
+ * @example
+ * // Edge case: Invalid season number
+ * await fetchAndStoreTVSeason('tt0903747', 99, 'api_key');
+ * // OMDB returns error, logs failure
+ *
+ * @example
+ * // Edge case: Network error
+ * await fetchAndStoreTVSeason('tt0903747', 1, 'api_key');
+ * // Logs error, doesn't store data
+ */
 async function fetchAndStoreTVSeason(seriesImdbID: string, season: number, apiKey: string): Promise<void> {
   try {
     await logToFile(`Fetching whole season ${season} for series IMDb ID: ${seriesImdbID}`);
