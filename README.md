@@ -24,6 +24,9 @@ A console application to scan, organize, and rename movie and TV series files. I
 - **TUI Interface**: Interactive prompts using Inquirer.js
 - **Config Merging**: Merges configuration from multiple sources with priority order
 - **Verbose Mode**: Shows detailed configuration information and final merged config
+- **Dual API Support**: OMDB API with TMDB fallback for enhanced metadata retrieval
+- **File Verification**: Verify and fix misplaced media files with `--verify-target` flag
+- **Enhanced Logging**: Comprehensive API enrichment logging and parsing debug information
 
 ## Project Structure
 
@@ -112,6 +115,7 @@ bun run dev
 - `--interactive, -i`: Enable interactive mode to prompt for missing inputs
 - `--no-save-config`: Do not save configuration to disk
 - `--verbose, -v`: Show detailed config information and final merged config
+- `--verify-target`: Verify and fix misplaced TV shows in movie folders and vice versa
 - `--help`: Show help information
 
 **Examples:**
@@ -124,6 +128,12 @@ bun run dev -m /movies -t /tv-shows
 
 # Interactive mode
 bun run dev --interactive
+
+# Verify and fix misplaced files
+bun run dev --verify-target
+
+# Verify with custom paths
+bun run dev /path/to/check --movie-path /my/movies --tv-path /my/shows --verify-target
 ```
 
 ### Configuration
@@ -164,6 +174,66 @@ This will display:
 - A table showing config availability in each possible folder
 - The final merged configuration used by the application
 
+### File Verification and Organization
+The application includes a powerful verification system to ensure your media files are properly organized:
+
+#### Verify Command
+Use the `--verify-target` flag to scan existing organized folders and identify misplaced files:
+
+```bash
+# Verify files in current directory
+bun run dev --verify-target
+
+# Verify specific path
+bun run dev /path/to/organized/files --verify-target
+
+# Combine with custom paths
+bun run dev --movie-path /my/movies --tv-path /my/tv --verify-target
+```
+
+**What it does:**
+- 🔍 **Scans organized folders** for misplaced media files
+- 🎯 **Identifies movies in TV folders** and vice versa
+- 📋 **Shows detailed report** of files that need to be moved
+- 🔄 **Automatically moves files** to correct locations
+- 🗂️ **Removes empty folders** left behind
+- ✅ **Preserves file integrity** with conflict resolution
+
+**Example output:**
+```
+🔍 Media Target Verification
+
+📁 Scanning: /path/to/media
+🎥 Movies: /movies
+📺 TV Shows: /tv
+
+Found 150 media file(s).
+
+📋 Verification Results:
+
+🚨 Found 3 misplaced file(s):
+
+📄 Movie.In.Wrong.Place.2020.avi
+   Current: /tv/Movie.In.Wrong.Place.2020.avi
+   Should be: /movies/Movie In Wrong Place (2020)/Movie In Wrong Place (2020).avi
+   Reason: Movie file found in TV shows directory
+
+🗂️ Found 2 empty folder(s) that will be removed:
+   /old/empty/folder1
+   /old/empty/folder2
+
+Do you want to proceed with these changes? (y/N)
+```
+
+#### Enhanced Logging and Debugging
+The application provides comprehensive logging for troubleshooting and monitoring:
+
+- **API Enrichment Logs**: Detailed logs of all API calls and responses (`api_enrichment.log`)
+- **Parsing Debug Info**: Database-stored parsing steps for filename analysis
+- **Verbose Configuration**: Detailed config source information with `--verbose` flag
+- **Progress Tracking**: Real-time progress bars for metadata enrichment
+- **Error Recovery**: Graceful handling of API failures with fallback mechanisms
+
 ### OMDB API Key
 To use OMDB API for better metadata:
 1. Get a free API key from [OMDB API](http://www.omdbapi.com/apikey.aspx)
@@ -179,6 +249,30 @@ To use OMDB API for better metadata:
 3. Alternatively, set the environment variable: `OMDB_API_KEY=your_key_here`
 
 Without an API key, the app falls back to web scraping.
+
+#### TMDB API Integration
+The application includes TMDB (The Movie Database) API as a fallback when OMDB API fails or is unavailable:
+
+- **Automatic Fallback**: When OMDB API requests fail, the system automatically tries TMDB API
+- **Seamless Integration**: TMDB data is converted to OMDB-compatible format for consistent processing
+- **Enhanced Reliability**: Dual API support ensures better metadata retrieval success rates
+- **Free API Access**: TMDB provides generous free tier access (4 requests per second, 50,000 requests per day)
+
+To use TMDB API for enhanced reliability:
+1. Get a free API key from [TMDB API](https://www.themoviedb.org/settings/api)
+2. Add the API key to your configuration file (`vorg-config.json`):
+   ```json
+   {
+     "omdbApiKey": "your_omdb_key_here",
+     "tmdbApiKey": "your_tmdb_key_here"
+   }
+   ```
+3. Alternatively, set the environment variable: `TMDB_API_KEY=your_key_here`
+
+**Fallback Flow:**
+1. Primary: OMDB API (most accurate for movies and TV shows)
+2. Fallback: TMDB API (when OMDB fails)
+3. Final Fallback: Web scraping (when both APIs fail)
 
 #### TV Show Database Caching
 The application implements an intelligent caching system for TV show metadata:
@@ -203,6 +297,8 @@ This approach significantly reduces API usage and improves processing speed for 
 - Cheerio (Web scraping)
 - Parse Torrent Name (Filename parsing)
 - FS Extra (File operations)
+- OMDB API (Primary metadata source)
+- TMDB API (Fallback metadata source)
 
 ## Testing
 

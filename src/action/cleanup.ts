@@ -24,6 +24,14 @@ interface CleanupResult {
 /**
  * Checks if a directory is a torrent-related folder by looking for .torrent files
  * or common torrent folder naming patterns.
+ *
+ * @function isTorrentFolder
+ * @param {string} dirPath - Path to the directory to check
+ * @returns {boolean} True if the directory appears to be torrent-related
+ *
+ * @example
+ * isTorrentFolder('/path/to/downloads'); // true if contains .torrent files
+ * isTorrentFolder('/path/to/movies'); // false
  */
 function isTorrentFolder(dirPath: string): boolean {
   try {
@@ -82,7 +90,22 @@ function isSampleFolder(dirPath: string): boolean {
 }
 
 /**
- * Recursively scans a directory for cleanup candidates.
+ * Recursively scans a directory for cleanup candidates including empty folders,
+ * trash files in torrent directories, and sample folders.
+ *
+ * @function scanForCleanup
+ * @param {string} scanPath - Root directory path to scan for cleanup opportunities
+ * @returns {CleanupResult} Object containing arrays of empty folders, trash files, and sample folders
+ *
+ * @example
+ * const result = scanForCleanup('/path/to/downloads');
+ * console.log(`Found ${result.trashFiles.length} trash files`);
+ * console.log(`Found ${result.emptyFolders.length} empty folders`);
+ *
+ * @example
+ * // Edge case: Non-existent directory
+ * const result = scanForCleanup('/non/existent/path');
+ * // Returns empty result object
  */
 export function scanForCleanup(scanPath: string): CleanupResult {
   const result: CleanupResult = {
@@ -144,7 +167,30 @@ export function scanForCleanup(scanPath: string): CleanupResult {
 }
 
 /**
- * Displays a preview of what will be cleaned up.
+ * Displays a formatted preview of cleanup operations that will be performed.
+ * Shows empty folders, trash files grouped by directory, and sample folders.
+ *
+ * @function displayCleanupPreview
+ * @param {CleanupResult} result - Cleanup scan results to display
+ * @returns {void}
+ *
+ * @example
+ * const result = scanForCleanup('/downloads');
+ * displayCleanupPreview(result);
+ * // Output:
+ * // 🧹 CLEANUP PREVIEW
+ * // ==================
+ * // 📁 Empty Folders to Delete:
+ * //   🗂️  /downloads/empty
+ * // 🗑️  Trash Files in Torrent Folders:
+ * //   📁 /downloads/torrent1/
+ * //     🗑️  info.nfo (Trash file in torrent folder (.nfo))
+ *
+ * @example
+ * // Edge case: No cleanup needed
+ * const emptyResult = { emptyFolders: [], trashFiles: [], sampleFolders: [] };
+ * displayCleanupPreview(emptyResult);
+ * // Output: ✨ No cleanup needed - folder is already clean!
  */
 export function displayCleanupPreview(result: CleanupResult): void {
   console.log('\n🧹 CLEANUP PREVIEW');
@@ -249,7 +295,41 @@ async function performCleanup(result: CleanupResult): Promise<void> {
 }
 
 /**
- * Main cleanup handler that scans, previews, and optionally performs cleanup.
+ * Main cleanup handler that orchestrates the complete cleanup process.
+ * Scans for cleanup opportunities, displays preview, and optionally performs cleanup operations.
+ *
+ * Cleanup operations include:
+ * - Removing empty directories
+ * - Deleting trash files from torrent folders (.torrent, .nfo, .txt, .jpg, etc.)
+ * - Removing sample folders
+ * - Preserving all video and subtitle files
+ *
+ * @async
+ * @function handleCleanup
+ * @param {string} scanPath - Directory path to scan for cleanup opportunities
+ * @param {boolean} [autoConfirm=false] - Skip confirmation prompt and proceed automatically
+ * @returns {Promise<void>}
+ * @throws {Error} If scan path doesn't exist or cleanup operations fail
+ *
+ * @example
+ * // Interactive cleanup with confirmation
+ * await handleCleanup('/path/to/downloads');
+ * // Scans, shows preview, asks for confirmation, then cleans
+ *
+ * @example
+ * // Automatic cleanup without confirmation
+ * await handleCleanup('/path/to/downloads', true);
+ * // Scans and cleans automatically
+ *
+ * @example
+ * // Edge case: No cleanup needed
+ * await handleCleanup('/clean/directory');
+ * // Output: ✨ No cleanup needed - scanned folder is already clean!
+ *
+ * @example
+ * // Edge case: Non-existent directory
+ * await handleCleanup('/non/existent/path');
+ * // Throws error about invalid path
  */
 export async function handleCleanup(scanPath: string, autoConfirm: boolean = false): Promise<void> {
   console.log('🧹 Scanning for cleanup opportunities...\n');
