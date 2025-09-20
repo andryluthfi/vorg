@@ -3,6 +3,25 @@ import parseTorrentName from 'parse-torrent-name';
 import * as path from 'path';
 import { saveParsingLog } from '../infrastructure/database';
 
+interface ParsedTorrentName {
+  title?: string;
+  year?: number;
+  season?: number;
+  episode?: number;
+}
+
+interface ParsingLogData {
+  filename: string;
+  normalized_filename: string;
+  parse_torrent_name_result: Record<string, unknown>;
+  initial_metadata: Record<string, unknown>;
+  folder_metadata: Record<string, unknown>;
+  final_metadata: Record<string, unknown>;
+  full_path?: string;
+  root_scan_path?: string;
+  folder_parses?: Record<string, unknown>[];
+}
+
 export interface MediaMetadata {
   title: string;
   year?: number;
@@ -66,10 +85,13 @@ export function parseFilename(filename: string, fullPath?: string, rootScanPath?
   const parsed = parseTorrentName(normalizedFilename);
 
   // Collect logging data
-  const logData: any = {
+  const logData: ParsingLogData = {
     filename,
     normalized_filename: normalizedFilename,
     parse_torrent_name_result: parsed,
+    initial_metadata: {},
+    folder_metadata: {},
+    final_metadata: {},
     full_path: fullPath,
     root_scan_path: rootScanPath
   };
@@ -87,7 +109,7 @@ export function parseFilename(filename: string, fullPath?: string, rootScanPath?
     }
   }
 
-  logData.initial_metadata = { title, year, season, episode, type };
+  logData.initial_metadata = { title, year, season, episode, type } as Record<string, unknown>;
 
   // If the parsed title is just a season/episode identifier, don't use it
   if (title && (/^S\d+(E\d+)?$/i.test(title.trim()) || title.trim().toLowerCase() === 's02')) {
@@ -135,7 +157,7 @@ export function parseFilename(filename: string, fullPath?: string, rootScanPath?
     episode: episode,
     type: type
   };
-  logData.final_metadata = metadata;
+  logData.final_metadata = metadata as unknown as Record<string, unknown>;
 
   // Save parsing log to database
   saveParsingLog(logData);
@@ -157,11 +179,11 @@ export function parseFilename(filename: string, fullPath?: string, rootScanPath?
  * parseFolderNames('I:\\Drop\\_Organize\\Process\\Squid.Game.S02.MULTI.2160p.WEB-DL.SDR.H265-AOC\\S02\\S02E01.mkv', 'I:\\Drop\\_Organize\\Process');
  * // Returns: { title: 'Squid Game', season: 2, type: 'tv' }
  */
-function parseFolderNames(fullPath: string, rootScanPath: string): { folderMetadata: Partial<MediaMetadata>, folderParses: Array<{parsed: any, level: number}> } {
+function parseFolderNames(fullPath: string, rootScanPath: string): { folderMetadata: Partial<MediaMetadata>, folderParses: Array<{parsed: ParsedTorrentName, level: number}> } {
   const folderMetadata: Partial<MediaMetadata> = {};
   let currentPath = path.dirname(fullPath);
   let levelsChecked = 0;
-  const folderParses: Array<{parsed: any, level: number}> = [];
+  const folderParses: Array<{parsed: ParsedTorrentName, level: number}> = [];
 
   // First pass: collect all folder parses
   while (levelsChecked < 2 && currentPath !== rootScanPath && currentPath !== path.dirname(currentPath)) {

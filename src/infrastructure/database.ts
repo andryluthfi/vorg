@@ -2,6 +2,18 @@ import { Database } from 'bun:sqlite';
 import * as path from 'path';
 import * as fs from 'fs';
 
+interface ParsingLogData {
+  filename: string;
+  normalized_filename: string;
+  parse_torrent_name_result: Record<string, unknown>;
+  initial_metadata: Record<string, unknown>;
+  folder_metadata: Record<string, unknown>;
+  final_metadata: Record<string, unknown>;
+  full_path?: string;
+  root_scan_path?: string;
+  folder_parses?: Record<string, unknown>[];
+}
+
 interface FileMove {
   id: number;
   original_path: string;
@@ -744,17 +756,7 @@ export function getAllTVEpisodes(): Record<string, unknown>[] {
  * });
  * // Saves parsing log to database
  */
-export function saveParsingLog(logData: {
-  filename: string;
-  normalized_filename: string;
-  parse_torrent_name_result: any;
-  initial_metadata: any;
-  folder_metadata: any;
-  final_metadata: any;
-  full_path?: string;
-  root_scan_path?: string;
-  folder_parses?: any[];
-}): void {
+export function saveParsingLog(logData: ParsingLogData): void {
   if (process.env.ENABLE_PARSER_LOGGING !== 'true') {
     return; // Skip logging if not enabled
   }
@@ -795,9 +797,9 @@ export function saveParsingLog(logData: {
  * const logs = getRecentParsingLogs();
  * // Returns last 50 parsing logs
  */
-export function getRecentParsingLogs(limit: number = 50): any[] {
+export function getRecentParsingLogs(limit: number = 50): Record<string, unknown>[] {
   const stmt = db.prepare('SELECT * FROM parsing_logs ORDER BY timestamp DESC LIMIT ?');
-  return stmt.all(limit) as any[];
+  return stmt.all(limit) as Record<string, unknown>[];
 }
 
 /**

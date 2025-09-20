@@ -212,7 +212,7 @@ async function verifyFileLocations(mediaFiles: MediaFile[], moviePath: string, t
       if (items.length === 0) {
         actualEmptyFolders.push(folder);
       }
-    } catch (error) {
+    } catch {
       // Folder might not exist or inaccessible, skip
     }
   }

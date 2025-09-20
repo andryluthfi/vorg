@@ -168,7 +168,7 @@ export async function validateApiKey(apiKey: string): Promise<boolean> {
     const response = await fetch(url);
     const data = await response.json() as Record<string, unknown>;
     return (data.Response as string) === 'True';
-  } catch (error) {
+  } catch {
     return false;
   }
 }
@@ -625,7 +625,7 @@ export async function validateTmdbApiKey(apiKey: string): Promise<boolean> {
     const response = await fetch(url);
     const data = await response.json() as Record<string, unknown>;
     return !data.status_code || data.status_code !== 7; // 7 = invalid API key
-  } catch (error) {
+  } catch {
     return false;
   }
 }

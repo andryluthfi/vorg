@@ -5,7 +5,7 @@ import * as os from 'os';
 import { loadConfig, saveConfig, AppConfig } from '../config/config';
 import { scanMediaFiles } from '../core-data/scanner';
 import { parseFilename, EnrichedMetadata } from '../core-data/parser';
-import { enrichMetadata, validateApiKey, validateTmdbApiKey } from '../infrastructure/api';
+import { enrichMetadata, validateApiKey } from '../infrastructure/api';
 import { organizeFiles, ProcessedFile } from '../business-logic/organizer';
 import { closeDatabase } from '../infrastructure/database';
 import { handleCleanup } from './cleanup';
@@ -242,6 +242,10 @@ function createProgressBar(total: number) {
     update: () => {
       current++;
       const percentage = Math.round((current / total) * 100);
+      process.stdout.write(`\r🔍 Enriching metadata... ${current}/${total} (${percentage}%)`);
+      if (current === total) {
+        console.log(); // New line after completion
+      }
     }
   };
 }

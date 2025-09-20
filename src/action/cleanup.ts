@@ -45,7 +45,7 @@ function isTorrentFolder(dirPath: string): boolean {
  * Checks if a file is a trash file in a torrent folder.
  * Excludes subtitle files and video files.
  */
-function isTrashFile(filePath: string, parentDir: string): boolean {
+function isTrashFile(filePath: string, _parentDir: string): boolean {
   const ext = path.extname(filePath).toLowerCase();
   const fileName = path.basename(filePath).toLowerCase();
 

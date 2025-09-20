@@ -73,8 +73,7 @@ function checkMetadataErrors(metadata: EnrichedMetadata): string[] {
  */
 function getFolderParsingInfo(fullPath: string, scanPath: string): Partial<MediaMetadata> {
   const folderMetadata: Partial<MediaMetadata> = {};
-  let currentPath = path.dirname(fullPath);
-  let levelsChecked = 0;
+  const currentPath = path.dirname(fullPath);
 
   // Parse the immediate parent folder
   if (currentPath !== scanPath && currentPath !== path.dirname(currentPath)) {
@@ -324,35 +323,6 @@ export async function organizeFiles(
       });
     }
   }
-
-  // Log debug information to file
-  const logDebugInfo = async (debugInfos: ParsingDebugInfo[], invalidFiles: ProcessedFile[]) => {
-    const logPath = path.join(process.cwd(), 'api_enrichment.log');
-    const timestamp = new Date().toISOString();
-
-    let logContent = `\n[${timestamp}] === PARSING DEBUG INFORMATION ===\n`;
-
-    for (const debug of debugInfos) {
-      logContent += `\nFile: ${debug.filename}\n`;
-      logContent += `  Filename Parsed: ${JSON.stringify(debug.filenameParsed)}\n`;
-      logContent += `  Folder Parsed: ${JSON.stringify(debug.folderParsed)}\n`;
-      logContent += `  Merged Parsed: ${JSON.stringify(debug.mergedParsed)}\n`;
-      logContent += `  Enriched: ${JSON.stringify(debug.enriched)}\n`;
-    }
-
-    logContent += `\n[${timestamp}] === INVALID FILES SUMMARY ===\n`;
-    invalidFiles.forEach((result, index) => {
-      logContent += `${index + 1}. ${result.originalPath}: ${result.errors.join(', ')}\n`;
-    });
-
-    try {
-      await fs.appendFile(logPath, logContent);
-    } catch (error) {
-      console.error('Failed to write debug info to log file:', error);
-    }
-  };
-
-  
 
   return results;
 }
