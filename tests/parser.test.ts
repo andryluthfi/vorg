@@ -87,7 +87,7 @@ describe("parseFilename", () => {
     const testCases: TestCase[] = [
       { fileName: "S02E01.mkv", fileFullPath: "I:\\Drop\\_Organize\\Process\\Squid.Game.S02.MULTI.2160p.WEB-DL.SDR.H265-AOC\\S02\\S02E01.mkv", expectedResult: { title: 'Squid Game', season: 2, episode: 1, type: 'tv' } },
       { fileName: "The Client List S01E01 1080p WEB-DL DD+ 5.1 x264-TrollHD.mkv", fileFullPath: "I:\\Drop\\_Organize\\Process\\The Client List S01-S02 1080p WEB-DL DD+ 5.1 x264-TrollHD\\The Client List S01 1080p WEB-DL DD+ 5.1 x264-TrollHD\\The Client List S01E01 1080p WEB-DL DD+ 5.1 x264-TrollHD.mkv", expectedResult: { title: 'The Client List', season: 1, episode: 1, type: 'tv' } },
-      { fileName: "Squid Game S03EP01 2160p 10Bit NF WEB-DL Multi-Audio DDP5.1 x265-TBMovies-.mkv", fileFullPath: "I:\\Drop\\_Organize\\Process\\Squid Game S03 2160p 10Bit NF WEB-DL Multi-Audio DDP5.1 x265-TBMovies\\Squid Game S03EP02 2160p 10Bit NF WEB-DL Multi-Audio DDP5.1 x265-TBMovies.mkv", expectedResult: {title: 'Squid Game', type: 'tv', season: 3, episode: 1}}
+      { fileName: "Squid Game S03EP01 2160p 10Bit NF WEB-DL Multi-Audio DDP5.1 x265-TBMovies-.mkv", fileFullPath: "I:\\Drop\\_Organize\\Process\\Squid Game S03 2160p 10Bit NF WEB-DL Multi-Audio DDP5.1 x265-TBMovies\\Squid Game S03EP01 2160p 10Bit NF WEB-DL Multi-Audio DDP5.1 x265-TBMovies.mkv", expectedResult: {title: 'Squid Game', type: 'tv', season: 3, episode: 1}}
     ]
 
 
