@@ -1,7 +1,7 @@
 import * as fs from 'fs-extra';
 import * as path from 'path';
 import { MediaFile } from '../core-data/scanner';
-import { EnrichedMetadata, generateNewName, parseFilename, sanitizeFilename } from '../core-data/parser';
+import { MediaMetadata, EnrichedMetadata, generateNewName, parseFilename, sanitizeFilename } from '../core-data/parser';
 import { saveFileMove } from '../infrastructure/database';
 
 export interface ProcessedFile {
@@ -9,6 +9,97 @@ export interface ProcessedFile {
   newPath: string;
   metadata: EnrichedMetadata;
   action: 'move' | 'skip' | 'overwrite' | 'preview';
+  errors: string[];
+}
+
+export interface ParsingDebugInfo {
+  filename: string;
+  filenameParsed: MediaMetadata;
+  folderParsed: Partial<MediaMetadata>;
+  mergedParsed: MediaMetadata;
+  enriched: EnrichedMetadata;
+}
+
+/**
+ * Checks metadata for required fields and returns list of missing requirements.
+ * For TV shows: title, season, episode, episodeTitle are required.
+ * For movies: title is required.
+ *
+ * @function checkMetadataErrors
+ * @param {EnrichedMetadata} metadata - Metadata to validate
+ * @returns {string[]} Array of error messages for missing required fields
+ *
+ * @example
+ * const errors = checkMetadataErrors({ type: 'tv', title: 'Show', season: 1, episode: 1 });
+ * // Returns: ['Missing episode title']
+ *
+ * @example
+ * const errors = checkMetadataErrors({ type: 'movie', title: 'Movie' });
+ * // Returns: []
+ */
+function checkMetadataErrors(metadata: EnrichedMetadata): string[] {
+  const errors: string[] = [];
+
+  if (metadata.type === 'tv') {
+    if (!metadata.title || metadata.title.trim() === '') {
+      errors.push('Missing TV show name');
+    }
+    if (metadata.season === undefined || metadata.season === null) {
+      errors.push('Missing season number');
+    }
+    if (metadata.episode === undefined || metadata.episode === null) {
+      errors.push('Missing episode number');
+    }
+    if (!metadata.episodeTitle || metadata.episodeTitle.trim() === '') {
+      errors.push('Missing episode title');
+    }
+  } else if (metadata.type === 'movie') {
+    if (!metadata.title || metadata.title.trim() === '') {
+      errors.push('Missing movie name');
+    }
+  }
+
+  return errors;
+}
+
+/**
+ * Extracts parsing information from parent folder names for debugging purposes.
+ * Mimics the folder parsing logic used in parseFilename but returns debug information.
+ *
+ * @function getFolderParsingInfo
+ * @param {string} fullPath - Full path to the file
+ * @param {string} scanPath - Root scan path
+ * @returns {Partial<MediaMetadata>} Folder parsing information
+ */
+function getFolderParsingInfo(fullPath: string, scanPath: string): Partial<MediaMetadata> {
+  const folderMetadata: Partial<MediaMetadata> = {};
+  let currentPath = path.dirname(fullPath);
+  let levelsChecked = 0;
+
+  // Parse the immediate parent folder
+  if (currentPath !== scanPath && currentPath !== path.dirname(currentPath)) {
+    const folderName = path.basename(currentPath);
+    const parsed = parseFilename(folderName); // Use parseFilename to get consistent parsing
+
+    // Extract information similar to parseFolderNames
+    if (parsed.title) {
+      folderMetadata.title = parsed.title;
+    }
+    if (parsed.year) {
+      folderMetadata.year = parsed.year;
+    }
+    if (parsed.season) {
+      folderMetadata.season = parsed.season;
+    }
+    if (parsed.episode) {
+      folderMetadata.episode = parsed.episode;
+    }
+    if (parsed.season || parsed.episode) {
+      folderMetadata.type = 'tv';
+    }
+  }
+
+  return folderMetadata;
 }
 
 /**
@@ -61,8 +152,10 @@ export async function organizeFiles(
   moviePath: string,
   tvPath: string,
   onConflict: (original: string, newPath: string) => Promise<'skip' | 'overwrite'>,
-  preview: boolean = false
+  preview: boolean = false,
+  scanPath?: string
 ): Promise<ProcessedFile[]> {
+  const debugInfos: ParsingDebugInfo[] = [];
   const results: ProcessedFile[] = [];
 
   // Separate video and subtitle files
@@ -79,37 +172,56 @@ export async function organizeFiles(
   }
 
   // Process video files first
-  for (const { file, metadata } of videoFiles) {
+  for (let i = 0; i < videoFiles.length; i++) {
+    const { file, metadata } = videoFiles[i];
+    const errors = checkMetadataErrors(metadata);
+
+    // Collect debug information
+    const debugInfo: ParsingDebugInfo = {
+      filename: file.name,
+      filenameParsed: parseFilename(file.name), // Basic filename parsing
+      folderParsed: scanPath ? getFolderParsingInfo(file.path, scanPath) : {},
+      mergedParsed: parseFilename(file.name, file.path, scanPath), // Merged result
+      enriched: metadata
+    };
+    debugInfos.push(debugInfo);
+
     let destDir: string;
     let baseName: string;
-
-    if (metadata.type === 'movie') {
-      destDir = path.join(moviePath, generateNewName(metadata));
-      baseName = generateNewName(metadata); // For movies, filename is same as folder name
-    } else {
-      // TV show
-      destDir = path.join(tvPath, sanitizeFilename(metadata.title), `Season ${metadata.season}`);
-      baseName = generateNewName(metadata);
-    }
-
-    if (!preview) {
-      await fs.ensureDir(destDir);
-    }
-
-    const newName = `${baseName}${file.extension}`;
-    const newPath = path.join(destDir, newName);
-
+    let newPath: string;
     let action: 'move' | 'skip' | 'overwrite' | 'preview' = preview ? 'preview' : 'move';
 
-    if (await fs.pathExists(newPath)) {
-      if (preview) {
-        action = 'overwrite'; // In preview, indicate it would overwrite
+    // Skip files with errors
+    if (errors.length > 0) {
+      action = 'skip';
+      newPath = file.path; // Keep original path
+    } else {
+      if (metadata.type === 'movie') {
+        destDir = path.join(moviePath, generateNewName(metadata));
+        baseName = generateNewName(metadata); // For movies, filename is same as folder name
       } else {
-        const conflictAction = await onConflict(file.path, newPath);
-        if (conflictAction === 'skip') {
-          action = 'skip';
+        // TV show
+        destDir = path.join(tvPath, sanitizeFilename(metadata.title), `Season ${metadata.season}`);
+        baseName = generateNewName(metadata);
+      }
+
+      if (!preview) {
+        await fs.ensureDir(destDir);
+      }
+
+      const newName = `${baseName}${file.extension}`;
+      newPath = path.join(destDir, newName);
+
+      if (await fs.pathExists(newPath)) {
+        if (preview) {
+          action = 'overwrite'; // In preview, indicate it would overwrite
         } else {
-          action = 'overwrite';
+          const conflictAction = await onConflict(file.path, newPath);
+          if (conflictAction === 'skip') {
+            action = 'skip';
+          } else {
+            action = 'overwrite';
+          }
         }
       }
     }
@@ -128,14 +240,15 @@ export async function organizeFiles(
       originalPath: file.path,
       newPath,
       metadata,
-      action
+      action,
+      errors
     });
   }
 
   // Process subtitle files
   for (const { file } of subtitleFiles) {
     // Try to find matching video file
-    const subtitleMetadata = parseFilename(file.name);
+    const subtitleMetadata = parseFilename(file.name, file.path, scanPath);
     let matchedVideo: { file: MediaFile; metadata: EnrichedMetadata } | null = null;
 
     // Look for video files with similar names
@@ -197,7 +310,8 @@ export async function organizeFiles(
         originalPath: file.path,
         newPath,
         metadata: matchedVideo.metadata, // Use video's metadata for subtitles
-        action
+        action,
+        errors: []
       });
     } else {
       // No matching video found, skip subtitle
@@ -205,10 +319,40 @@ export async function organizeFiles(
         originalPath: file.path,
         newPath: file.path, // Keep original path
         metadata: subtitleMetadata,
-        action: 'skip'
+        action: 'skip',
+        errors: []
       });
     }
   }
+
+  // Log debug information to file
+  const logDebugInfo = async (debugInfos: ParsingDebugInfo[], invalidFiles: ProcessedFile[]) => {
+    const logPath = path.join(process.cwd(), 'api_enrichment.log');
+    const timestamp = new Date().toISOString();
+
+    let logContent = `\n[${timestamp}] === PARSING DEBUG INFORMATION ===\n`;
+
+    for (const debug of debugInfos) {
+      logContent += `\nFile: ${debug.filename}\n`;
+      logContent += `  Filename Parsed: ${JSON.stringify(debug.filenameParsed)}\n`;
+      logContent += `  Folder Parsed: ${JSON.stringify(debug.folderParsed)}\n`;
+      logContent += `  Merged Parsed: ${JSON.stringify(debug.mergedParsed)}\n`;
+      logContent += `  Enriched: ${JSON.stringify(debug.enriched)}\n`;
+    }
+
+    logContent += `\n[${timestamp}] === INVALID FILES SUMMARY ===\n`;
+    invalidFiles.forEach((result, index) => {
+      logContent += `${index + 1}. ${result.originalPath}: ${result.errors.join(', ')}\n`;
+    });
+
+    try {
+      await fs.appendFile(logPath, logContent);
+    } catch (error) {
+      console.error('Failed to write debug info to log file:', error);
+    }
+  };
+
+  
 
   return results;
 }

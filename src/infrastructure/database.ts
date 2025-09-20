@@ -147,6 +147,20 @@ db.exec(`
     new_path TEXT NOT NULL,
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
   );
+
+  CREATE TABLE IF NOT EXISTS parsing_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    filename TEXT,
+    normalized_filename TEXT,
+    parse_torrent_name_result TEXT,
+    initial_metadata TEXT,
+    folder_metadata TEXT,
+    final_metadata TEXT,
+    full_path TEXT,
+    root_scan_path TEXT,
+    folder_parses TEXT
+  );
 `);
 
 // Prepared statements
@@ -447,7 +461,8 @@ export function getTVShowByImdbID(imdbID: string) {
  */
 export function getTVEpisode(seriesImdbID: string, season: number, episode: number) {
   const stmt = db.prepare('SELECT * FROM tv_show_episode WHERE seriesID = ? AND season = ? AND episode = ?');
-  return stmt.get(seriesImdbID, season, episode);
+  const result = stmt.get(seriesImdbID, season, episode);
+  return result;
 }
 
 /**
@@ -699,6 +714,90 @@ export function getAllTVShows(): Record<string, unknown>[] {
 export function getAllTVEpisodes(): Record<string, unknown>[] {
   const stmt = db.prepare('SELECT * FROM tv_show_episode ORDER BY seriesID, season, episode');
   return stmt.all() as Record<string, unknown>[];
+}
+
+/**
+ * Saves parsing debug information to the database for troubleshooting.
+ * Stores filename parsing steps and intermediate results.
+ *
+ * @function saveParsingLog
+ * @param {object} logData - Parsing log data
+ * @param {string} logData.filename - Original filename
+ * @param {string} logData.normalized_filename - Normalized filename
+ * @param {any} logData.parse_torrent_name_result - Result from parse-torrent-name library
+ * @param {any} logData.initial_metadata - Initial metadata after parsing
+ * @param {any} logData.folder_metadata - Metadata from folder parsing
+ * @param {any} logData.final_metadata - Final metadata result
+ * @param {string} [logData.full_path] - Full file path
+ * @param {string} [logData.root_scan_path] - Root scan path
+ * @param {any[]} [logData.folder_parses] - Array of folder parse results
+ * @returns {void}
+ *
+ * @example
+ * saveParsingLog({
+ *   filename: "Show.S01E01.mkv",
+ *   normalized_filename: "Show.S01E01.mkv",
+ *   parse_torrent_name_result: { title: "Show", season: 1, episode: 1 },
+ *   initial_metadata: { title: "Show", season: 1, episode: 1, type: "tv" },
+ *   folder_metadata: {},
+ *   final_metadata: { title: "Show", season: 1, episode: 1, type: "tv" }
+ * });
+ * // Saves parsing log to database
+ */
+export function saveParsingLog(logData: {
+  filename: string;
+  normalized_filename: string;
+  parse_torrent_name_result: any;
+  initial_metadata: any;
+  folder_metadata: any;
+  final_metadata: any;
+  full_path?: string;
+  root_scan_path?: string;
+  folder_parses?: any[];
+}): void {
+  if (process.env.ENABLE_PARSER_LOGGING !== 'true') {
+    return; // Skip logging if not enabled
+  }
+
+  db.prepare(`
+    INSERT INTO parsing_logs (
+      filename, normalized_filename, parse_torrent_name_result,
+      initial_metadata, folder_metadata, final_metadata,
+      full_path, root_scan_path, folder_parses
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    logData.filename,
+    logData.normalized_filename,
+    JSON.stringify(logData.parse_torrent_name_result),
+    JSON.stringify(logData.initial_metadata),
+    JSON.stringify(logData.folder_metadata),
+    JSON.stringify(logData.final_metadata),
+    logData.full_path || null,
+    logData.root_scan_path || null,
+    logData.folder_parses ? JSON.stringify(logData.folder_parses) : null
+  );
+}
+
+/**
+ * Retrieves recent parsing logs from the database for debugging.
+ * Returns logs ordered by timestamp descending.
+ *
+ * @function getRecentParsingLogs
+ * @param {number} [limit=50] - Maximum number of logs to retrieve
+ * @returns {any[]} Array of parsing log records
+ *
+ * @example
+ * const logs = getRecentParsingLogs(10);
+ * // Returns last 10 parsing logs
+ *
+ * @example
+ * // Get all recent logs
+ * const logs = getRecentParsingLogs();
+ * // Returns last 50 parsing logs
+ */
+export function getRecentParsingLogs(limit: number = 50): any[] {
+  const stmt = db.prepare('SELECT * FROM parsing_logs ORDER BY timestamp DESC LIMIT ?');
+  return stmt.all(limit) as any[];
 }
 
 /**

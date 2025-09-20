@@ -7,6 +7,7 @@ export interface AppConfig {
   moviePath?: string;
   tvPath?: string;
   omdbApiKey?: string;
+  tmdbApiKey?: string;
   includeSubtitles?: boolean;
 }
 

@@ -5,13 +5,15 @@ import * as os from 'os';
 import { loadConfig, saveConfig, AppConfig } from '../config/config';
 import { scanMediaFiles } from '../core-data/scanner';
 import { parseFilename, EnrichedMetadata } from '../core-data/parser';
-import { enrichMetadata, validateApiKey } from '../infrastructure/api';
+import { enrichMetadata, validateApiKey, validateTmdbApiKey } from '../infrastructure/api';
 import { organizeFiles, ProcessedFile } from '../business-logic/organizer';
 import { closeDatabase } from '../infrastructure/database';
+import { handleCleanup } from './cleanup';
 
 interface FileInfo {
   oldName: string;
   newName: string;
+  errors: string[];
 }
 
 interface FileNode {
@@ -59,10 +61,9 @@ function displayNode(node: FileNode, indent: string = '  ') {
   for (const [key, value] of Object.entries(node)) {
     if (key === '_files') {
       const files = value as FileInfo[];
-      if (files.length === 1) {
-        console.log(`${indent}📄 ${files[0].oldName} ⮞ \x1b[32m${files[0].newName}\x1b[0m`);
-      } else if (files.length > 1) {
-        console.log(`${indent}📄 Multiple files:`);
+      if (files.length > 0) {
+        // Always use table format
+        console.log(`${indent}📄 Files:`);
 
         // Calculate max lengths for proper alignment
         const maxOldLength = Math.max(...files.map(f => f.oldName.length));
@@ -95,10 +96,11 @@ function displayNode(node: FileNode, indent: string = '  ') {
 
 /**
  * Displays a preview of the proposed folder structure changes for movies and TV shows.
- * Shows the hierarchical organization with old and new file names, grouped by type.
+ * Separates valid files from invalid files, showing hierarchical organization for valid files
+ * and error details for invalid files.
  *
  * @function displayPreview
- * @param {ProcessedFile[]} results - Array of processed files with their new paths
+ * @param {ProcessedFile[]} results - Array of processed files with their new paths and errors
  * @param {string} moviePath - Destination path for movies
  * @param {string} tvPath - Destination path for TV shows
  * @returns {void}
@@ -107,70 +109,106 @@ function displayNode(node: FileNode, indent: string = '  ') {
  * const results = [{
  *   originalPath: '/old/movie.avi',
  *   newPath: '/movies/Movie (2020)/Movie (2020).avi',
- *   metadata: { type: 'movie', title: 'Movie', year: 2020 }
+ *   metadata: { type: 'movie', title: 'Movie', year: 2020 },
+ *   errors: []
  * }];
  * displayPreview(results, '/movies', '/tv');
  * // Output:
+ * // ✅ VALID FILES
  * // 🎥 MOVIE: /movies
  * // 📁 Movie (2020)
  * //   📄 movie.avi ⮞ Movie (2020).avi
  *
  * @example
- * // Edge case: No files for a type
- * displayPreview([], '/movies', '/tv');
- * // Output:
- * // 🎥 MOVIE: /movies
- * //   (no files)
- *
- * @example
- * // Edge case: Mixed movie and TV files
- * const results = [
- *   { metadata: { type: 'movie' }, ... },
- *   { metadata: { type: 'tv' }, ... }
- * ];
+ * // Edge case: Files with errors
+ * const results = [{
+ *   originalPath: '/old/bad.avi',
+ *   newPath: '/old/bad.avi',
+ *   metadata: { type: 'tv', title: '' },
+ *   errors: ['Missing TV show name']
+ * }];
  * displayPreview(results, '/movies', '/tv');
- * // Shows both sections
+ * // Shows invalid files section
  */
 function displayPreview(results: ProcessedFile[], moviePath: string, tvPath: string) {
-  console.log('Proposed folder structure with changes:');
+  const validResults = results.filter(r => r.errors.length === 0 && r.action !== 'skip');
+  const invalidResults = results.filter(r => r.errors.length > 0);
 
-  const basePaths = { movie: moviePath, tv: tvPath };
+  // Display valid files
+  if (validResults.length > 0) {
+    console.log('✅ VALID FILES');
+    console.log('Proposed folder structure with changes:');
 
-  for (const [type, basePath] of Object.entries(basePaths)) {
-    console.log(`${type === 'movie' ? '🎥' : '📺'} ${type.toUpperCase()}: ${basePath}`);
-    const typeResults = results.filter(r => r.metadata.type === type);
+    const basePaths = { movie: moviePath, tv: tvPath };
 
-    if (typeResults.length === 0) {
-      console.log('  (no files)');
-      continue;
-    }
+    for (const [type, basePath] of Object.entries(basePaths)) {
+      console.log(`${type === 'movie' ? '🎥' : '📺'} ${type.toUpperCase()}: ${basePath}`);
+      const typeResults = validResults.filter(r => r.metadata.type === type);
 
-    // Build hierarchical structure
-    const root: FileNode = {};
+      if (typeResults.length === 0) {
+        console.log('  (no files)');
+        continue;
+      }
 
-    for (const result of typeResults) {
-      const fullPath = path.dirname(result.newPath);
-      const relativePath = path.relative(basePath, fullPath);
-      const pathParts = relativePath.split(path.sep);
-      const oldName = path.basename(result.originalPath);
-      const newName = path.basename(result.newPath);
+      // Build hierarchical structure
+      const root: FileNode = {};
 
-      let current = root;
-      for (const part of pathParts) {
-        if (!current[part]) {
-          current[part] = {} as FileNode;
+      for (const result of typeResults) {
+        const fullPath = path.dirname(result.newPath);
+        const relativePath = path.relative(basePath, fullPath);
+        const pathParts = relativePath.split(path.sep);
+        const oldName = path.basename(result.originalPath);
+        const newName = path.basename(result.newPath);
+
+        let current = root;
+        for (const part of pathParts) {
+          if (!current[part]) {
+            current[part] = {} as FileNode;
+          }
+          current = current[part] as FileNode;
         }
-        current = current[part] as FileNode;
+
+        if (!current['_files']) {
+          current['_files'] = [] as FileInfo[];
+        }
+        (current['_files'] as FileInfo[]).push({ oldName, newName, errors: [] });
       }
 
-      if (!current['_files']) {
-        current['_files'] = [] as FileInfo[];
-      }
-      (current['_files'] as FileInfo[]).push({ oldName, newName });
+      // Display hierarchical structure
+      displayNode(root);
+      console.log();
+    }
+  } else {
+    console.log('✅ VALID FILES');
+    console.log('  (no valid files)');
+    console.log();
+  }
+
+  // Display invalid files
+  if (invalidResults.length > 0) {
+    console.log('❌ INVALID FILES');
+
+    // Calculate max lengths for proper alignment
+    const maxFileLength = Math.max(...invalidResults.map(r => path.basename(r.originalPath).length));
+    const maxErrorsLength = Math.max(...invalidResults.map(r => r.errors.join(', ').length));
+
+    // Create table borders
+    const header = `  ┌─${'─'.repeat(maxFileLength)}─┬─${'─'.repeat(maxErrorsLength)}─┐`;
+    const separator = `  ├─${'─'.repeat(maxFileLength)}─┼─${'─'.repeat(maxErrorsLength)}─┤`;
+    const footer = `  └─${'─'.repeat(maxFileLength)}─┴─${'─'.repeat(maxErrorsLength)}─┘`;
+
+    console.log(header);
+    console.log(`  │ ${'File Name'.padEnd(maxFileLength)} │ ${'Errors'.padEnd(maxErrorsLength)} │`);
+    console.log(separator);
+
+    // Display each invalid file
+    for (const result of invalidResults) {
+      const fileName = path.basename(result.originalPath);
+      const errorsText = result.errors.join(', ');
+      console.log(`  │ ${fileName.padEnd(maxFileLength)} │ ${errorsText.padEnd(maxErrorsLength)} │`);
     }
 
-    // Display hierarchical structure
-    displayNode(root);
+    console.log(footer);
     console.log();
   }
 }
@@ -204,7 +242,6 @@ function createProgressBar(total: number) {
     update: () => {
       current++;
       const percentage = Math.round((current / total) * 100);
-      process.stdout.write(`\r🔍 Enriching metadata... ${current}/${total} (${percentage}%)`);
     }
   };
 }
@@ -223,6 +260,7 @@ function createProgressBar(total: number) {
  * 6. Preview proposed folder structure
  * 7. Confirm changes with user
  * 8. Organize files with conflict handling
+ * 9. Cleanup scanned folder (empty folders, trash files)
  *
  * @async
  * @function handleApply
@@ -304,6 +342,7 @@ export async function handleApply(scanPath: string, argv: Record<string, unknown
       moviePath: config.moviePath,
       tvPath: config.tvPath,
       omdbApiKey: config.omdbApiKey,
+      tmdbApiKey: config.tmdbApiKey,
       includeSubtitles: config.includeSubtitles
     };
 
@@ -342,13 +381,14 @@ export async function handleApply(scanPath: string, argv: Record<string, unknown
   let moviePath = (argv['movie-path'] as string | undefined) || config.moviePath;
   let tvPath = (argv['tv-path'] as string | undefined) || config.tvPath;
   let omdbApiKey = config.omdbApiKey;
+  let tmdbApiKey = config.tmdbApiKey;
 
   // Always prompt for config if:
   // 1. --no-save-config flag is set, OR
   // 2. No config was found in any path (configResult.path is null), OR
-  // 3. Config exists but moviePath, tvPath, or omdbApiKey are missing
+  // 3. Config exists but moviePath, tvPath, omdbApiKey, or tmdbApiKey are missing
   const noSaveConfigFlag = process.argv.includes('--no-save-config');
-  const shouldPromptForConfig = noSaveConfigFlag || !configResult.path || !moviePath || !tvPath || !omdbApiKey;
+  const shouldPromptForConfig = noSaveConfigFlag || !configResult.path || !moviePath || !tvPath || !omdbApiKey || !tmdbApiKey;
 
   if (shouldPromptForConfig) {
     console.log('📁 Configuration needed. Please provide destination paths and API key:');
@@ -421,12 +461,26 @@ export async function handleApply(scanPath: string, argv: Record<string, unknown
           if (!/^[a-zA-Z0-9]+$/.test(input)) return 'API key should contain only letters and numbers';
           return true;
         }
+      },
+      {
+        type: 'input',
+        name: 'tmdbApiKey',
+        message: 'Enter TMDB API key (optional, get from https://www.themoviedb.org/settings/api):',
+        default: tmdbApiKey || '',
+        validate: (input) => {
+          // Allow empty for optional
+          if (!input.trim()) return true;
+          // Basic validation for API key format (alphanumeric)
+          if (!/^[a-zA-Z0-9]+$/.test(input)) return 'API key should contain only letters and numbers';
+          return true;
+        }
       }
     ]);
 
     moviePath = answers.moviePath;
     tvPath = answers.tvPath;
     omdbApiKey = answers.omdbApiKey.trim() || undefined;
+    tmdbApiKey = answers.tmdbApiKey.trim() || undefined;
 
     // Validate and resolve paths
     if (moviePath && tvPath) {
@@ -442,6 +496,7 @@ export async function handleApply(scanPath: string, argv: Record<string, unknown
       moviePath: moviePath,
       tvPath: tvPath,
       omdbApiKey: omdbApiKey,
+      tmdbApiKey: tmdbApiKey,
       includeSubtitles: true // Default to true for subtitle handling
     };
 
@@ -488,7 +543,7 @@ export async function handleApply(scanPath: string, argv: Record<string, unknown
   const progressBar = createProgressBar(mediaFiles.length);
 
   for (const file of mediaFiles) {
-    const metadata = parseFilename(file.name);
+    const metadata = parseFilename(file.name, file.path, scanPath);
     let enriched: EnrichedMetadata;
 
     if (file.type === 'video') {
@@ -508,7 +563,7 @@ export async function handleApply(scanPath: string, argv: Record<string, unknown
   // Step 5: Preview changes
   console.log('📋 Previewing changes...\n');
 
-  const previewResults = await organizeFiles(mediaFiles, metadatas, moviePath!, tvPath!, async () => 'skip', true);
+  const previewResults = await organizeFiles(mediaFiles, metadatas, moviePath!, tvPath!, async () => 'skip', true, scanPath);
 
   // Visualize changes
   console.log('Proposed folder structure with changes:');
@@ -563,10 +618,18 @@ export async function handleApply(scanPath: string, argv: Record<string, unknown
     return action;
   };
 
-  const results = await organizeFiles(mediaFiles, metadatas, moviePath!, tvPath!, conflictHandler, false);
+  const results = await organizeFiles(mediaFiles, metadatas, moviePath!, tvPath!, conflictHandler, false, scanPath);
 
   console.log('\n🎉 Processing complete!');
   console.log(`Processed ${results.length} file(s).`);
+
+  // Step 7: Cleanup scanned folder
+  try {
+    await handleCleanup(scanPath);
+  } catch (error) {
+    console.error('❌ Cleanup failed:', error);
+    console.log('Continuing with database cleanup...');
+  }
 
   closeDatabase();
 }

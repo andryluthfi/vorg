@@ -5,6 +5,7 @@ import { loadConfig } from '../config/config';
 import { getTVEpisode, saveTVEpisodeBatch, saveTVShow, saveMovie, getTVShowByImdbID, getMovieByImdbID } from './database';
 
 const OMDB_BASE_URL = 'http://www.omdbapi.com/';
+const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 
 interface OmdbRating {
   Source: string;
@@ -344,7 +345,6 @@ export async function enrichMetadata(metadata: MediaMetadata): Promise<EnrichedM
         if (metadata.season && metadata.episode) {
           const existingEpisode = getTVEpisode(imdbID, metadata.season, metadata.episode) as Record<string, unknown> | undefined;
           if (existingEpisode) {
-            await logToFile(`Found existing episode data in database`);
             enriched.plot = existingEpisode.plot as string;
             enriched.genre = existingEpisode.genre as string;
             enriched.actors = existingEpisode.actors as string;
@@ -362,6 +362,30 @@ export async function enrichMetadata(metadata: MediaMetadata): Promise<EnrichedM
               enriched.actors = episodeData.actors as string;
               enriched.imdbRating = episodeData.imdbRating as string;
               enriched.episodeTitle = episodeData.title as string;
+            } else {
+              // OMDB failed to fetch episode data, try TMDB as fallback
+              await logToFile(`OMDB episode fetch failed, trying TMDB fallback for ${metadata.title} S${metadata.season}E${metadata.episode}`);
+              const tmdbSeriesId = await searchTmdbTVShow(metadata.title, metadata.year);
+              if (tmdbSeriesId) {
+                await logToFile(`Found TMDB series ID: ${tmdbSeriesId}`);
+                const tmdbEpisodeData = await fetchTmdbEpisode(tmdbSeriesId, metadata.season, metadata.episode);
+                if (tmdbEpisodeData) {
+                  // Save TMDB episode data to database
+                  saveTVEpisodeBatch([tmdbEpisodeData as unknown as Record<string, unknown>]);
+                  await logToFile(`Saved TMDB episode data to database`);
+
+                  // Use the TMDB data for enrichment
+                  enriched.plot = tmdbEpisodeData.plot;
+                  enriched.genre = tmdbEpisodeData.genre;
+                  enriched.actors = tmdbEpisodeData.actors;
+                  enriched.imdbRating = tmdbEpisodeData.imdbRating;
+                  enriched.episodeTitle = tmdbEpisodeData.title;
+                } else {
+                  await logToFile(`TMDB episode fetch also failed`);
+                }
+              } else {
+                await logToFile(`Could not find TMDB series ID for ${metadata.title}`);
+              }
             }
             return enriched;
           }
@@ -557,5 +581,155 @@ async function fetchAndStoreTVSeason(seriesImdbID: string, season: number, apiKe
     }
   } catch (error) {
     await logToFile(`Error fetching season: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+/**
+ * Retrieves the TMDB API key from configuration or environment variables.
+ * Checks config file first, then environment variable, falls back to placeholder.
+ *
+ * @async
+ * @function getTmdbApiKey
+ * @returns {Promise<string>} TMDB API key or placeholder value
+ *
+ * @example
+ * const apiKey = await getTmdbApiKey();
+ * // Returns configured API key or 'your_tmdb_api_key_here'
+ */
+async function getTmdbApiKey(): Promise<string> {
+  const configResult = loadConfig();
+  const apiKey = configResult.config.tmdbApiKey || process.env.TMDB_API_KEY || 'your_tmdb_api_key_here';
+  return apiKey;
+}
+
+/**
+ * Validates a TMDB API key by making a test request to the API.
+ * Tests with a known movie to verify the key works.
+ *
+ * @async
+ * @function validateTmdbApiKey
+ * @param {string} apiKey - The API key to validate
+ * @returns {Promise<boolean>} True if API key is valid, false otherwise
+ *
+ * @example
+ * const isValid = await validateTmdbApiKey('your_api_key');
+ * // Returns: true if key is valid
+ */
+export async function validateTmdbApiKey(apiKey: string): Promise<boolean> {
+  if (!apiKey || apiKey.trim() === '' || apiKey === 'your_tmdb_api_key_here') {
+    return false;
+  }
+  try {
+    const url = new URL(`${TMDB_BASE_URL}/movie/550`); // Test with Fight Club
+    url.searchParams.set('api_key', apiKey);
+    const response = await fetch(url);
+    const data = await response.json() as Record<string, unknown>;
+    return !data.status_code || data.status_code !== 7; // 7 = invalid API key
+  } catch (error) {
+    return false;
+  }
+}
+
+/**
+ * Searches TMDB API for a TV show and returns its TMDB ID.
+ * Used to find the TMDB ID for a series before fetching episode data.
+ *
+ * @async
+ * @function searchTmdbTVShow
+ * @param {string} title - Title to search for
+ * @param {number} [year] - Optional release year for more accurate results
+ * @returns {Promise<number | null>} TMDB ID if found, null if not found or failed
+ *
+ * @example
+ * const tmdbId = await searchTmdbTVShow('Breaking Bad', 2008);
+ * // Returns: 1396
+ */
+async function searchTmdbTVShow(title: string, year?: number): Promise<number | null> {
+  try {
+    const TMDB_API_KEY = await getTmdbApiKey();
+    const searchUrl = new URL(`${TMDB_BASE_URL}/search/tv`);
+    searchUrl.searchParams.set('api_key', TMDB_API_KEY);
+    searchUrl.searchParams.set('query', title);
+    if (year) searchUrl.searchParams.set('first_air_date_year', year.toString());
+
+    await logToFile(`TMDB TV Search URL: ${searchUrl.toString()}`);
+    const response = await fetch(searchUrl);
+    const data = await response.json() as Record<string, unknown>;
+    await logToFile(`TMDB TV Search Response: ${JSON.stringify(data)}`);
+
+    if (data.results && Array.isArray(data.results) && data.results.length > 0) {
+      const firstResult = data.results[0] as Record<string, unknown>;
+      return firstResult.id as number;
+    }
+
+    return null;
+  } catch (error) {
+    await logToFile(`TMDB TV search failed: ${error instanceof Error ? error.message : String(error)}`);
+    return null;
+  }
+}
+
+/**
+ * Fetches episode data from TMDB API and converts it to OMDB-compatible format.
+ * Retrieves specific episode details and transforms them to match existing database schema.
+ *
+ * @async
+ * @function fetchTmdbEpisode
+ * @param {number} seriesTmdbId - TMDB ID of the TV series
+ * @param {number} season - Season number
+ * @param {number} episode - Episode number
+ * @returns {Promise<EpisodeData | null>} Episode data in OMDB format, or null if failed
+ *
+ * @example
+ * const episodeData = await fetchTmdbEpisode(1396, 1, 1);
+ * // Returns: episode data in OMDB-compatible format
+ */
+async function fetchTmdbEpisode(seriesTmdbId: number, season: number, episode: number): Promise<EpisodeData | null> {
+  try {
+    const TMDB_API_KEY = await getTmdbApiKey();
+    const episodeUrl = new URL(`${TMDB_BASE_URL}/tv/${seriesTmdbId}/season/${season}/episode/${episode}`);
+    episodeUrl.searchParams.set('api_key', TMDB_API_KEY);
+
+    await logToFile(`TMDB Episode Fetch URL: ${episodeUrl.toString()}`);
+    const response = await fetch(episodeUrl);
+    const data = await response.json() as Record<string, unknown>;
+    await logToFile(`TMDB Episode Fetch Response: ${JSON.stringify(data)}`);
+
+    if (data.id) {
+      // Convert TMDB format to OMDB-compatible format
+      const episodeData: EpisodeData = {
+        imdbID: `tmdb_${data.id}`, // Use TMDB ID with prefix since we don't have IMDb ID
+        seriesID: `tmdb_${seriesTmdbId}`, // Use TMDB series ID with prefix
+        title: String(data.name || ''),
+        year: data.air_date ? new Date(String(data.air_date)).getFullYear().toString() : '',
+        rated: '', // TMDB doesn't provide rating info like OMDB
+        released: String(data.air_date || ''),
+        season: season,
+        episode: episode,
+        runtime: data.runtime ? String(data.runtime) : '',
+        genre: '', // Would need series data for this
+        director: '', // TMDB has crew info but not in simple format
+        writer: '',
+        actors: '',
+        plot: String(data.overview || ''),
+        language: '',
+        country: '',
+        awards: '',
+        poster: data.still_path ? `https://image.tmdb.org/t/p/w500${data.still_path}` : '',
+        ratings: '[]',
+        metascore: '',
+        imdbRating: data.vote_average ? String(data.vote_average) : '',
+        imdbVotes: data.vote_count ? String(data.vote_count) : '',
+        type: 'episode',
+        response: 'True'
+      };
+
+      return episodeData;
+    }
+
+    return null;
+  } catch (error) {
+    await logToFile(`TMDB episode fetch failed: ${error instanceof Error ? error.message : String(error)}`);
+    return null;
   }
 }

@@ -79,6 +79,53 @@ describe("parseFilename", () => {
     expect(result.episode).toBe(24);
     expect(result.type).toBe("tv");
   });
+
+  test("should parse folder names when filename parsing is incomplete", () => {
+    // Simulate the Squid Game example
+    const rootScannedFolder: string = "I:\\Drop\\_Organize\\Process";
+    type TestCase = { fileName: string, fileFullPath: string, expectedResult: { title: string, season: number, episode: number, type: 'tv' | 'movie' } }
+    const testCases: TestCase[] = [
+      { fileName: "S02E01.mkv", fileFullPath: "I:\\Drop\\_Organize\\Process\\Squid.Game.S02.MULTI.2160p.WEB-DL.SDR.H265-AOC\\S02\\S02E01.mkv", expectedResult: { title: 'Squid Game', season: 2, episode: 1, type: 'tv' } },
+      { fileName: "The Client List S01E01 1080p WEB-DL DD+ 5.1 x264-TrollHD.mkv", fileFullPath: "I:\\Drop\\_Organize\\Process\\The Client List S01-S02 1080p WEB-DL DD+ 5.1 x264-TrollHD\\The Client List S01 1080p WEB-DL DD+ 5.1 x264-TrollHD\\The Client List S01E01 1080p WEB-DL DD+ 5.1 x264-TrollHD.mkv", expectedResult: { title: 'The Client List', season: 1, episode: 1, type: 'tv' } },
+      { fileName: "Squid Game S03EP01 2160p 10Bit NF WEB-DL Multi-Audio DDP5.1 x265-TBMovies-.mkv", fileFullPath: "I:\\Drop\\_Organize\\Process\\Squid Game S03 2160p 10Bit NF WEB-DL Multi-Audio DDP5.1 x265-TBMovies\\Squid Game S03EP02 2160p 10Bit NF WEB-DL Multi-Audio DDP5.1 x265-TBMovies.mkv", expectedResult: {title: 'Squid Game', type: 'tv', season: 3, episode: 1}}
+    ]
+
+
+    for (const testCase of testCases) {
+      const result = parseFilename(testCase.fileName, testCase.fileFullPath, rootScannedFolder);
+
+      expect(result.title).toBe(testCase.expectedResult.title);
+      expect(result.season).toBe(testCase.expectedResult.season);
+      expect(result.episode).toBe(testCase.expectedResult.episode);
+      expect(result.type).toBe(testCase.expectedResult.type);
+    }
+
+    // I:\Drop\_Organize\Process\The Client List S01-S02 1080p WEB-DL DD+ 5.1 x264-TrollHD\The Client List S01 1080p WEB-DL DD+ 5.1 x264-TrollHD
+
+
+  });
+
+  test("should not traverse beyond root scan path", () => {
+    // Test case where we reach the root scan path
+    const result2 = parseFilename("S02E01.mkv", "I:\\Drop\\_Organize\\Process\\S02\\S02E01.mkv", "I:\\Drop\\_Organize\\Process");
+
+    // Should not find TV show name since we can't go beyond root
+    expect(result2.title).toBeUndefined();
+    expect(result2.season).toBe(2);
+    expect(result2.episode).toBe(1);
+    expect(result2.type).toBe("tv");
+
+  });
+
+  test("should work without fullPath and rootScanPath parameters", () => {
+    // Test backward compatibility
+    const result = parseFilename("S02E01.mkv");
+
+    expect(result.title).toBeUndefined();
+    expect(result.season).toBe(2);
+    expect(result.episode).toBe(1);
+    expect(result.type).toBe("tv");
+  });
 });
 
 describe("sanitizeFilename", () => {

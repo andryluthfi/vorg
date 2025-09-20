@@ -50,7 +50,7 @@ describe("organizeFiles", () => {
       }
     ];
 
-    const results = await organizeFiles(files, metadatas, movieDir, "/fake/tv", async () => "skip", true);
+    const results = await organizeFiles(files, metadatas, movieDir, "/fake/tv", async () => "skip", true, "/fake/scan");
 
     expect(results.length).toBe(1);
     expect(results[0].action).toBe("preview");
@@ -76,17 +76,18 @@ describe("organizeFiles", () => {
         title: "Test Show",
         season: 1,
         episode: 1,
+        episodeTitle: "Pilot",
         type: "tv" as const
       }
     ];
 
-    const results = await organizeFiles(files, metadatas, "/fake/movies", tvDir, async () => "skip", true);
+    const results = await organizeFiles(files, metadatas, "/fake/movies", tvDir, async () => "skip", true, "/fake/scan");
 
     expect(results.length).toBe(1);
     expect(results[0].action).toBe("preview");
     expect(results[0].newPath).toContain("Test Show");
     expect(results[0].newPath).toContain("Season 1");
-    expect(results[0].newPath).toContain("Test Show - Season 1 Episode 1.mp4");
+    expect(results[0].newPath).toContain("Test Show - Season 1 Episode 1 - Pilot.mp4");
   });
 
   test("should match subtitle files with video files", async () => {
@@ -120,7 +121,7 @@ describe("organizeFiles", () => {
       }
     ];
 
-    const results = await organizeFiles(files, metadatas, movieDir, "/fake/tv", async () => "skip", true);
+    const results = await organizeFiles(files, metadatas, movieDir, "/fake/tv", async () => "skip", true, "/fake/scan");
 
     expect(results.length).toBe(2);
 
@@ -154,7 +155,7 @@ describe("organizeFiles", () => {
       }
     ];
 
-    const results = await organizeFiles(files, metadatas, movieDir, "/fake/tv", async () => "skip", true);
+    const results = await organizeFiles(files, metadatas, movieDir, "/fake/tv", async () => "skip", true, "/fake/scan");
 
     expect(results.length).toBe(1);
     expect(results[0].action).toBe("skip");
@@ -187,7 +188,7 @@ describe("organizeFiles", () => {
       }
     ];
 
-    const results = await organizeFiles(files, metadatas, movieDir, "/fake/tv", async () => "skip", true);
+    const results = await organizeFiles(files, metadatas, movieDir, "/fake/tv", async () => "skip", true, "/fake/scan");
 
     expect(results.length).toBe(1);
     expect(results[0].action).toBe("overwrite"); // In preview mode, conflicts are marked as overwrite
@@ -219,7 +220,7 @@ describe("organizeFiles", () => {
       }
     ];
 
-    const results = await organizeFiles(files, metadatas, movieDir, "/fake/tv", async () => "skip", false);
+    const results = await organizeFiles(files, metadatas, movieDir, "/fake/tv", async () => "skip", false, "/fake/scan");
 
     expect(results.length).toBe(1);
     expect(results[0].action).toBe("skip");
@@ -257,7 +258,7 @@ describe("organizeFiles", () => {
       }
     ];
 
-    const results = await organizeFiles(files, metadatas, movieDir, "/fake/tv", async () => "overwrite", false);
+    const results = await organizeFiles(files, metadatas, movieDir, "/fake/tv", async () => "overwrite", false, "/fake/scan");
 
     expect(results.length).toBe(1);
     expect(results[0].action).toBe("overwrite");
@@ -308,11 +309,12 @@ describe("organizeFiles", () => {
         title: "Test Show",
         season: 1,
         episode: 1,
+        episodeTitle: "Test Episode",
         type: "tv" as const
       }
     ];
 
-    const results = await organizeFiles(files, metadatas, movieDir, tvDir, async () => "skip", true);
+    const results = await organizeFiles(files, metadatas, movieDir, tvDir, async () => "skip", true, "/fake/scan");
 
     expect(results.length).toBe(3);
 
@@ -355,7 +357,7 @@ describe("organizeFiles", () => {
       }
     ];
 
-    const results = await organizeFiles(files, metadatas, "/fake/movies", tvDir, async () => "skip", true);
+    const results = await organizeFiles(files, metadatas, "/fake/movies", tvDir, async () => "skip", true, "/fake/scan");
 
     expect(results.length).toBe(1);
     expect(results[0].action).toBe("preview");
@@ -363,7 +365,7 @@ describe("organizeFiles", () => {
   });
 
   test("should handle empty file arrays", async () => {
-    const results = await organizeFiles([], [], "/fake/movies", "/fake/tv", async () => "skip", true);
+    const results = await organizeFiles([], [], "/fake/movies", "/fake/tv", async () => "skip", true, "/fake/scan");
 
     expect(results).toEqual([]);
   });
@@ -388,7 +390,7 @@ describe("organizeFiles", () => {
       }
     ];
 
-    const results = await organizeFiles(files, metadatas, movieDir, "/fake/tv", async () => "skip", true);
+    const results = await organizeFiles(files, metadatas, movieDir, "/fake/tv", async () => "skip", true, "/fake/scan");
 
     expect(results.length).toBe(1);
     expect(results[0].action).toBe("preview");
